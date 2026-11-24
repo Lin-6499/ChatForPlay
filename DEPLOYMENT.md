@@ -41,6 +41,15 @@
 - 原站点回归：`https://ht.linblog.site/` 返回 200；`https://files.linblog.site/` 根路径部署前后均返回 404。
 - 交付后已从 `ubuntu` 的 `authorized_keys` 移除本次 `linchat-deploy-session` 临时公钥；其余 SSH 授权保留。
 
+## 桌面一键安装发行
+
+- 公开版本：[LinChat 1.0.1](https://github.com/Lin-6499/ChatForPlay/releases/tag/v1.0.1)。
+- 安装包：`LinChat-Setup-1.0.1.exe`，106,885,608 字节；GitHub 返回的 SHA-256 与仓库内 `desktop-release.json` 一致。
+- 安装包 SHA-256：`871342839d6c84e85f4965ba5ad4da5c1dbb803eda1a286b3f54d11626189376`。
+- 普通用户双击安装包即可自动安装、生成快捷方式并启动；源码 ZIP 完整解压后双击 `一键安装使用.cmd` 也可自动下载安装。
+- 已从不含依赖及构建文件的源码 ZIP 验证 CMD 入口，包含中文与空格的解压路径可正常使用，检测到当前已安装版本后直接启动。结果：`dist/verification/source-install-results.json`。
+- 已在 Windows PowerShell 5.1 中使用源码 ZIP 内的安装脚本，从 GitHub 公开地址完整下载实际安装包，并通过文件大小及 SHA-256 校验。结果：`dist/verification/download-results.json`。
+
 ## 常用运维命令
 
 ```bash

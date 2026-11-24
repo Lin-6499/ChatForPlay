@@ -34,7 +34,7 @@
 
 **如果下载的是 GitHub 源码 ZIP：** 先完整解压，再双击根目录的 **`一键安装使用.cmd`** 或 **`启动LinChat.cmd`**。脚本会自动获取对应版本的安装包、验证 SHA-256、安装并启动；已安装同版或更新版本时直接打开。
 
-安装脚本优先使用本地完整安装包或已校验的下载缓存，首次在线下载约 103 MB。缓存位于 `%LOCALAPPDATA%\LinChat\downloads\`，网络失败时窗口会显示原因和直接下载地址。
+安装脚本优先使用本地完整安装包或已校验的下载缓存，首次在线下载约 102 MB。缓存位于 `%LOCALAPPDATA%\LinChat\downloads\`，网络失败时窗口会显示原因和直接下载地址。
 
 [查看发行版本与便携版](https://github.com/Lin-6499/ChatForPlay/releases/latest)
 
