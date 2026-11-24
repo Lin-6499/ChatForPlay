@@ -1,0 +1,25 @@
+[Unit]
+Description=LinChat realtime messaging server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=linchat
+Group=linchat
+WorkingDirectory=/opt/linchat
+ExecStart=/opt/linchat/bin/linchat -listen 127.0.0.1:8787 -data /var/lib/linchat -url https://chat.linblog.site -name LinChat
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=20
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/linchat
+MemoryMax=384M
+CPUQuota=75%
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

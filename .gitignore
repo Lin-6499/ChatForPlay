@@ -1,0 +1,13 @@
+/data/
+/dist/
+/web/node_modules/
+/node_modules/
+/.desktop-data/
+/desktop/assets/*.png
+/desktop/assets/*.ico
+/web/dist/
+*.exe
+*.db*
+*.log
+.env
+/首次使用.txt

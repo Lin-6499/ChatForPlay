@@ -1,0 +1,7 @@
+node_modules
+web/node_modules
+.desktop-data
+data
+dist/desktop
+dist/verification
+.git

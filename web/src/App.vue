@@ -1,0 +1,545 @@
+<script setup lang="ts">
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import Icon from './Icon.vue'
+
+interface User { id: number; username: string; nickname: string; admin: boolean; online: boolean; last_read?: number }
+interface Conversation { id: number; kind: string; name: string; owner_id: number; member_count: number; last_id: number; last_at: number; preview: string; unread: number; last_read: number }
+interface Message { id: number; conversation_id: number; sender_id: number; sender_name: string; client_id: string; kind: string; content: string; file_id?: string; file_name?: string; file_size?: number; file_mime?: string; created_at: number }
+interface Pending { client_id: string; conversation_id: number; content: string; created_at: number; error?: string; retryable?: boolean }
+interface Page { messages: Message[]; more: boolean }
+type Modal = '' | 'directory' | 'group' | 'invite' | 'settings' | 'connection' | 'members' | 'addMembers'
+class ApiError extends Error { constructor(message: string, public status: number) { super(message) } }
+
+const location = window.location
+const desktop = window.linchatDesktop
+const me = ref<User | null>(null), people = ref<User[]>([]), conversations = ref<Conversation[]>([])
+const messages = ref<Message[]>([]), members = ref<User[]>([]), pending = ref<Pending[]>([])
+const currentID = ref(0), ready = ref(false), initialized = ref(true), busy = ref(false), error = ref('')
+const serverName = ref('LinChat'), maxUpload = ref(25 * 1024 * 1024), authMode = ref('login')
+const form = ref({ username: '', nickname: '', password: '', token: '' })
+const profile = ref({ nickname: '', old_password: '', new_password: '' })
+const query = ref(''), directoryQuery = ref(''), groupName = ref(''), selectedUsers = ref<number[]>([])
+const draft = ref(''), modal = ref<Modal>(''), showMobileChat = ref(false), showDetails = ref(false)
+const moreHistory = ref(false), loadingHistory = ref(false), toast = ref(''), connection = ref('连接中')
+const inviteUses = ref(10), inviteLink = ref(''), upload = ref<{ name: string; percent: number } | null>(null)
+const uploadRetry = ref<{ file: File; cid: number; clientID: string } | null>(null)
+const messageList = ref<HTMLElement>(), composer = ref<HTMLTextAreaElement>(), fileInput = ref<HTMLInputElement>()
+const connectionURL = ref(''), connectionLabel = ref(''), recentServers = ref<{ name: string; url: string }[]>([])
+const dragging = ref(false)
+let ws: WebSocket | null = null, reconnectTimer: ReturnType<typeof setTimeout> | undefined
+let toastTimer: ReturnType<typeof setTimeout> | undefined, refreshTimer: ReturnType<typeof setTimeout> | undefined
+let reconnectAttempt = 0, intentionalClose = false, flushing = false, selectionVersion = 0
+const cursors = new Map<number, number>(), readSent = new Map<number, number>()
+const current = computed(() => conversations.value.find(c => c.id === currentID.value))
+const filteredConversations = computed(() => conversations.value.filter(c => c.name.toLowerCase().includes(query.value.toLowerCase())))
+const otherUsers = computed(() => people.value.filter(p => p.id !== me.value?.id && `${p.nickname} ${p.username}`.toLowerCase().includes(directoryQuery.value.toLowerCase())))
+const groupCandidates = computed(() => otherUsers.value.filter(p => modal.value !== 'addMembers' || !members.value.some(m => m.id === p.id)))
+const onlineCount = computed(() => people.value.filter(p => p.online).length)
+const pendingHere = computed(() => pending.value.filter(p => p.conversation_id === currentID.value))
+const totalUnread = computed(() => conversations.value.reduce((n, c) => n + c.unread, 0))
+const networkMode = /^26\./.test(location.hostname) ? 'Radmin 虚拟局域网' : location.hostname === '127.0.0.1' || location.hostname === 'localhost' ? '本地服务' : '云端连接'
+const activeOnline = computed(() => members.value.filter(p => p.online).length)
+
+async function api<T = any>(path: string, method = 'GET', body?: unknown): Promise<T> {
+  const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 20000)
+  try {
+    const r = await fetch('/api' + path, { method, credentials: 'same-origin', signal: controller.signal,
+      headers: { 'X-LinChat': '1', ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}) },
+      body: body !== undefined ? JSON.stringify(body) : undefined })
+    const data = await r.json()
+    if (!r.ok) throw new ApiError(data.error || '请求失败', r.status)
+    return data as T
+  } finally { clearTimeout(timer) }
+}
+function explain(e: unknown) { return e instanceof ApiError ? e.message : '连接暂时不可用，请检查网络或服务端是否运行' }
+function notify(text: string) { toast.value = text; clearTimeout(toastTimer); toastTimer = setTimeout(() => toast.value = '', 4200) }
+function avatar(name: string) { return Array.from(name || 'L').slice(0, 1).join('').toUpperCase() }
+function hue(id: number) { return ['mint', 'blue', 'peach', 'lilac', 'sand'][id % 5] }
+function time(ts: number) { return new Date(ts).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) }
+function date(ts: number) { return new Date(ts).toLocaleDateString('zh-CN', { month: 'long', day: 'numeric' }) }
+function bytes(n = 0) { return n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB` }
+function uid() {
+  const a = crypto.getRandomValues(new Uint8Array(18))
+  return Array.from(a, n => n.toString(16).padStart(2, '0')).join('')
+}
+function localGet(key: string) { try { return localStorage.getItem(key) } catch { return null } }
+function localSet(key: string, value: string) { try { localStorage.setItem(key, value) } catch { notify('浏览器本地存储不可用，请保持页面打开以保留待发消息') } }
+function pendingKey() { return `linchat-pending:${me.value?.id}` }
+function savePending() { if (me.value) localSet(pendingKey(), JSON.stringify(pending.value)) }
+function mergeMessages(items: Message[]) {
+  const map = new Map(messages.value.map(m => [m.id, m]))
+  for (const m of items) if (m.conversation_id === currentID.value) map.set(m.id, m)
+  messages.value = Array.from(map.values()).sort((a, b) => a.id - b.id)
+  const acknowledgements = new Set(items.filter(m => m.sender_id === me.value?.id).map(m => m.client_id))
+  pending.value = pending.value.filter(p => !acknowledgements.has(p.client_id))
+  savePending()
+}
+function atBottom() { const e = messageList.value; return !e || e.scrollHeight - e.scrollTop - e.clientHeight < 140 }
+async function bottom() { await nextTick(); const e = messageList.value; if (e) e.scrollTop = e.scrollHeight }
+async function refreshConversations() {
+  conversations.value = await api<Conversation[]>('/conversations')
+  document.title = `${totalUnread.value ? `(${totalUnread.value}) ` : ''}LinChat · 让交流近一点`
+}
+function scheduleRefresh() {
+  clearTimeout(refreshTimer)
+  refreshTimer = setTimeout(() => refreshConversations().catch(() => {}), 200)
+}
+async function loadMembers(cid = currentID.value) {
+  if (!cid) return
+  const result = await api<{ members: User[] }>(`/conversations/${cid}`)
+  if (currentID.value === cid) members.value = result.members
+}
+async function selectConversation(c: Conversation) {
+  if (currentID.value === c.id) { showMobileChat.value = true; return }
+  const version = ++selectionVersion
+  currentID.value = c.id; messages.value = []; members.value = []; draft.value = ''
+  moreHistory.value = false; loadingHistory.value = true; showMobileChat.value = true; showDetails.value = false
+  try {
+    const [page] = await Promise.all([api<Page>(`/conversations/${c.id}/messages`), loadMembers(c.id)])
+    if (version !== selectionVersion) return
+    mergeMessages(page.messages); moreHistory.value = page.more
+    cursors.set(c.id, page.messages.at(-1)?.id || 0)
+    await bottom(); await markRead()
+  } catch (e) { if (version === selectionVersion) notify(explain(e)) }
+  finally { if (version === selectionVersion) loadingHistory.value = false }
+}
+async function older() {
+  const cid = currentID.value, first = messages.value[0]?.id
+  if (!first || loadingHistory.value) return
+  const height = messageList.value?.scrollHeight || 0, top = messageList.value?.scrollTop || 0
+  loadingHistory.value = true
+  try {
+    const page = await api<Page>(`/conversations/${cid}/messages?before=${first}`)
+    if (cid !== currentID.value) return
+    mergeMessages(page.messages); moreHistory.value = page.more
+    await nextTick()
+    if (messageList.value) messageList.value.scrollTop = top + messageList.value.scrollHeight - height
+  } catch (e) { notify(explain(e)) }
+  finally { loadingHistory.value = false }
+}
+let syncVersion = 0
+async function syncActive() {
+  const cid = currentID.value, version = ++syncVersion
+  if (!cid) return
+  let cursor = cursors.get(cid) || 0, more = true
+  const scroll = atBottom()
+  while (more && currentID.value === cid && version === syncVersion) {
+    const page = await api<Page>(`/conversations/${cid}/messages?after=${cursor}`)
+    if (currentID.value !== cid || version !== syncVersion) return
+    mergeMessages(page.messages)
+    cursor = page.messages.at(-1)?.id || cursor
+    cursors.set(cid, cursor)
+    more = page.more && page.messages.length > 0
+  }
+  if (scroll) { await bottom(); await markRead() }
+}
+async function markRead() {
+  if (document.hidden || !atBottom() || !me.value) return
+  const cid = currentID.value, last = messages.value.at(-1)?.id
+  if (!last || (readSent.get(cid) || 0) >= last) return
+  readSent.set(cid, last)
+  try {
+    await api(`/conversations/${cid}/read`, 'POST', { message_id: last })
+    scheduleRefresh()
+  } catch { readSent.delete(cid) }
+}
+async function enterApp() {
+  me.value = await api<User>('/me')
+  profile.value = { nickname: me.value.nickname, old_password: '', new_password: '' }
+  try { pending.value = JSON.parse(localGet(pendingKey()) || '[]') } catch { pending.value = [] }
+  [people.value] = await Promise.all([api<User[]>('/users'), refreshConversations()])
+  if (conversations.value.length) await selectConversation(conversations.value[0])
+  showMobileChat.value = false
+  intentionalClose = false; reconnectAttempt = 0
+  connect()
+}
+function connect() {
+  if (intentionalClose || !me.value) return
+  clearTimeout(reconnectTimer)
+  connection.value = reconnectAttempt ? '重新连接中' : '连接中'
+  const socket = new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/api/ws`)
+  ws = socket
+  socket.onopen = () => { if (ws === socket) { reconnectAttempt = 0; connection.value = '实时在线' } }
+  socket.onmessage = async e => {
+    if (ws !== socket) return
+    try {
+      const event = JSON.parse(e.data)
+      if (event.type === 'hello') {
+        await Promise.all([refreshConversations(), syncActive(), loadMembers()])
+        people.value = await api<User[]>('/users')
+        for (const p of pending.value) if (p.retryable) p.error = ''
+        await flushPending()
+      } else if (event.type === 'message') {
+        const m = event.message as Message
+        if (m.conversation_id === currentID.value) {
+          const scroll = atBottom(); mergeMessages([m])
+          if (scroll) { await bottom(); await markRead() }
+        } else if (m.sender_id === me.value?.id) {
+          pending.value = pending.value.filter(p => p.client_id !== m.client_id); savePending()
+        }
+        scheduleRefresh()
+        if (document.hidden && m.sender_id !== me.value?.id) {
+          const body = m.kind === 'text' ? m.content.slice(0, 100) : '[附件]'
+          if (desktop) void desktop.notify(m.sender_name, body)
+          else if ('Notification' in window && Notification.permission === 'granted') {
+            const n = new Notification(m.sender_name, { body, tag: `conv-${m.conversation_id}` })
+            n.onclick = () => { window.focus(); const c = conversations.value.find(c => c.id === m.conversation_id); if (c) void selectConversation(c); n.close() }
+          }
+        }
+      } else if (event.type === 'presence') {
+        for (const list of [people.value, members.value]) {
+          const p = list.find(p => p.id === event.user_id); if (p) p.online = event.online
+        }
+      } else if (event.type === 'read') {
+        if (event.conversation_id === currentID.value) {
+          const p = members.value.find(p => p.id === event.user_id)
+          if (p) p.last_read = Math.max(p.last_read || 0, event.last_read)
+        }
+        if (event.user_id === me.value?.id) scheduleRefresh()
+      } else if (event.type === 'users.changed' || event.type === 'conversations.changed') {
+        [people.value] = await Promise.all([api<User[]>('/users'), refreshConversations(), loadMembers()])
+      }
+    } catch (e) { if (e instanceof ApiError && e.status === 401) sessionExpired() }
+  }
+  socket.onclose = () => {
+    if (ws !== socket || intentionalClose) return
+    connection.value = '连接已断开'
+    const delay = Math.min(30000, 1000 * 2 ** Math.min(reconnectAttempt++, 5)) + Math.random() * 500
+    reconnectTimer = setTimeout(async () => {
+      try { await api('/me'); connect() }
+      catch (e) {
+        if (e instanceof ApiError && e.status === 401) sessionExpired()
+        else connect()
+      }
+    }, delay)
+  }
+  socket.onerror = () => socket.close()
+}
+function sessionExpired() {
+  intentionalClose = true; clearTimeout(reconnectTimer); ws?.close(); ws = null
+  me.value = null; currentID.value = 0; messages.value = []; error.value = '登录已过期，请重新登录'
+}
+async function submitAuth() {
+  if (busy.value) return
+  busy.value = true; error.value = ''
+  try {
+    const path = !initialized.value ? '/setup' : authMode.value === 'register' ? '/auth/register' : '/auth/login'
+    const body = path === '/auth/login' ? { username: form.value.username, password: form.value.password } : form.value
+    await api(path, 'POST', body)
+    initialized.value = true; form.value.password = ''; form.value.token = ''
+    await enterApp()
+  } catch (e) { error.value = explain(e) }
+  finally { busy.value = false }
+}
+async function send() {
+  const content = draft.value.trim()
+  if (!content || !currentID.value || !me.value) return
+  if (Array.from(content).length > 4000) { notify('每条消息最多 4000 个字符'); return }
+  pending.value.push({ client_id: uid(), conversation_id: currentID.value, content, created_at: Date.now() })
+  draft.value = ''; savePending(); await bottom()
+  await flushPending()
+}
+async function flushPending() {
+  if (flushing || !me.value) return
+  flushing = true
+  try {
+    for (const p of [...pending.value]) {
+      if (p.error) continue
+      try {
+        const m = await api<Message>(`/conversations/${p.conversation_id}/messages`, 'POST', { client_id: p.client_id, content: p.content })
+        const scroll = atBottom()
+        mergeMessages([m]); scheduleRefresh()
+        if (scroll) { await bottom(); await markRead() }
+      } catch (e) {
+        const entry = pending.value.find(x => x.client_id === p.client_id)
+        if (entry) { entry.error = explain(e); entry.retryable = !(e instanceof ApiError) || e.status >= 500 || e.status === 429 }
+        if (e instanceof ApiError && e.status === 401) sessionExpired()
+        savePending(); break
+      }
+    }
+  } finally { flushing = false }
+}
+function retry(p: Pending) { p.error = ''; savePending(); void flushPending() }
+function discard(p: Pending) { pending.value = pending.value.filter(x => x.client_id !== p.client_id); savePending() }
+function onEnter(e: KeyboardEvent) { if (!e.shiftKey && !e.isComposing) { e.preventDefault(); void send() } }
+async function sendFile(file: File, cid = currentID.value, clientID = uid()) {
+  if (upload.value || !cid) return
+  if (file.size > maxUpload.value) { notify(`每个文件最多 ${bytes(maxUpload.value)}`); return }
+  upload.value = { name: file.name, percent: 0 }; uploadRetry.value = null
+  try {
+    const m = await new Promise<Message>((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      xhr.open('POST', `/api/conversations/${cid}/files?client_id=${encodeURIComponent(clientID)}`)
+      xhr.setRequestHeader('X-LinChat', '1'); xhr.timeout = 150000
+      xhr.upload.onprogress = e => { if (e.lengthComputable && upload.value) upload.value.percent = Math.round(e.loaded / e.total * 100) }
+      xhr.onerror = () => reject(new Error('network'))
+      xhr.ontimeout = () => reject(new Error('timeout'))
+      xhr.onload = () => {
+        try {
+          const data = JSON.parse(xhr.responseText)
+          if (xhr.status >= 200 && xhr.status < 300) resolve(data)
+          else reject(new ApiError(data.error || '上传失败', xhr.status))
+        } catch (e) { reject(e) }
+      }
+      const body = new FormData(); body.append('file', file); xhr.send(body)
+    })
+    mergeMessages([m]); scheduleRefresh(); await bottom(); await markRead()
+  } catch (e) { uploadRetry.value = { file, cid, clientID }; notify(explain(e)) }
+  finally { upload.value = null; if (fileInput.value) fileInput.value.value = '' }
+}
+function pickFile(e: Event) { const f = (e.target as HTMLInputElement).files?.[0]; if (f) void sendFile(f) }
+function dropped(e: DragEvent) { dragging.value = false; const f = e.dataTransfer?.files[0]; if (f) void sendFile(f) }
+function paste(e: ClipboardEvent) { const f = e.clipboardData?.files[0]; if (f) { e.preventDefault(); void sendFile(f) } }
+function readCount(m: Message) { return members.value.filter(p => p.id !== m.sender_id && (p.last_read || 0) >= m.id).length }
+function openModal(m: Modal) {
+  error.value = ''; directoryQuery.value = ''; selectedUsers.value = []; groupName.value = ''
+  if (m === 'settings' && me.value) profile.value = { nickname: me.value.nickname, old_password: '', new_password: '' }
+  if (m === 'connection') { connectionURL.value = location.origin; connectionLabel.value = serverName.value }
+  modal.value = m
+}
+async function direct(p: User) {
+  try {
+    const c = await api<{ id: number }>('/conversations', 'POST', { kind: 'direct', name: '', members: [p.id] })
+    await refreshConversations(); modal.value = ''
+    const target = conversations.value.find(x => x.id === c.id); if (target) await selectConversation(target)
+  } catch (e) { error.value = explain(e) }
+}
+async function saveGroup() {
+  if (busy.value) return
+  busy.value = true; error.value = ''
+  try {
+    if (modal.value === 'addMembers') {
+      await api(`/conversations/${currentID.value}/members`, 'POST', { members: selectedUsers.value })
+      await Promise.all([refreshConversations(), loadMembers()])
+    } else {
+      const result = await api<{ id: number }>('/conversations', 'POST', { kind: 'group', name: groupName.value, members: selectedUsers.value })
+      await refreshConversations()
+      const target = conversations.value.find(c => c.id === result.id); if (target) await selectConversation(target)
+    }
+    modal.value = ''
+  } catch (e) { error.value = explain(e) }
+  finally { busy.value = false }
+}
+async function createInvite() {
+  busy.value = true; error.value = ''
+  try {
+    const result = await api<{ token: string }>('/invites', 'POST', { uses: inviteUses.value })
+    inviteLink.value = `${location.origin}/#invite=${result.token}`
+  } catch (e) { error.value = explain(e) }
+  finally { busy.value = false }
+}
+async function copy(text: string) {
+  try { await navigator.clipboard.writeText(text); notify('已复制') }
+  catch {
+    const el = document.createElement('textarea'); el.value = text; el.style.position = 'fixed'; el.style.opacity = '0'
+    document.body.appendChild(el); el.select()
+    const ok = document.execCommand('copy'); el.remove()
+    notify(ok ? '已复制' : '请选中文字后手动复制')
+  }
+}
+async function saveProfile() {
+  busy.value = true; error.value = ''
+  try {
+    await api('/me', 'PATCH', profile.value)
+    me.value = await api<User>('/me'); modal.value = ''; notify('个人设置已保存')
+  } catch (e) { error.value = explain(e) }
+  finally { busy.value = false }
+}
+async function logout() {
+  try {
+    await api('/auth/logout', 'POST', {})
+    intentionalClose = true; clearTimeout(reconnectTimer); ws?.close(); ws = null
+    me.value = null; currentID.value = 0; messages.value = []; pending.value = []; modal.value = ''
+    cursors.clear(); readSent.clear(); authMode.value = 'login'
+  } catch (e) { notify(explain(e)) }
+}
+function switchServer(raw = connectionURL.value) {
+  try {
+    const u = new URL(raw)
+    if (!['http:', 'https:'].includes(u.protocol) || u.username || u.password || (u.pathname !== '/' && u.pathname !== '')) throw new Error()
+    const url = u.origin
+    const entries = [{ name: connectionLabel.value.trim() || u.hostname, url }, ...recentServers.value.filter(s => s.url !== url)].slice(0, 8)
+    localSet('linchat-servers', JSON.stringify(entries))
+    location.assign(url)
+  } catch { error.value = '请输入完整地址，例如 https://chat.linblog.site 或 http://26.1.2.3:8787' }
+}
+async function notifications() {
+  if (desktop) { await desktop.notify('LinChat', '桌面通知已就绪，最小化后收到新消息会在这里提醒。'); return }
+  if (!('Notification' in window) || !window.isSecureContext) { notify('系统通知需要 HTTPS 或本机 localhost；当前入口可使用页面未读提示'); return }
+  const permission = await Notification.requestPermission()
+  notify(permission === 'granted' ? '已开启系统消息通知' : '可在浏览器网站设置中管理通知权限')
+}
+function onVisible() {
+  if (!document.hidden && me.value) void Promise.all([syncActive(), refreshConversations()]).catch(() => {})
+}
+onMounted(async () => {
+  try { recentServers.value = JSON.parse(localGet('linchat-servers') || '[]') } catch {}
+  const hash = new URLSearchParams(location.hash.slice(1))
+  if (hash.get('setup')) form.value.token = hash.get('setup')!
+  if (hash.get('invite')) { form.value.token = hash.get('invite')!; authMode.value = 'register' }
+  if (hash.has('setup') || hash.has('invite')) history.replaceState(null, '', location.pathname)
+  try {
+    const status = await api<{ name: string; initialized: boolean; max_upload: number }>('/status')
+    serverName.value = status.name; initialized.value = status.initialized; maxUpload.value = status.max_upload
+    if (status.initialized) {
+      try { await enterApp() } catch (e) { if (!(e instanceof ApiError && e.status === 401)) error.value = explain(e) }
+    }
+  } catch (e) { error.value = explain(e) }
+  ready.value = true
+  document.addEventListener('visibilitychange', onVisible)
+})
+onBeforeUnmount(() => {
+  intentionalClose = true; ws?.close(); clearTimeout(reconnectTimer); clearTimeout(refreshTimer); clearTimeout(toastTimer)
+  document.removeEventListener('visibilitychange', onVisible)
+})
+</script>
+
+<template>
+  <div v-if="!ready" class="loading-screen"><img src="/favicon.svg" alt="" width="56" /><p>正在连接 LinChat…</p></div>
+  <main v-else-if="!me" class="auth-page">
+    <section class="auth-story">
+      <a class="brand" href="/"><img src="/favicon.svg" alt="" /><span>LinChat<span class="brand-dot">.</span></span></a>
+      <div class="story-content">
+        <span class="eyebrow"><span class="live-dot"></span> SAME CONVERSATION. ANYWHERE.</span>
+        <h1>距离远一点，<br />交流<span>近一点。</span></h1>
+        <p>一处属于你们的交流空间。<br />从云端到虚拟局域网，让每一句话及时抵达。</p>
+        <div class="story-conversation">
+          <div class="story-message"><span class="avatar peach">林</span><div>无论在哪里，都可以一起聊。<small>刚刚 · 已送达</small></div></div>
+          <div class="story-message reply"><div>我们在这里，连接成功！<small>刚刚 <Icon name="check" :size="12" /></small></div><span class="avatar mint">友</span></div>
+          <div class="network-line"><span><Icon name="cloud" :size="16" /> 云端</span><i></i><Icon name="chat" /><i></i><span><Icon name="network" :size="16" /> Radmin VPN</span></div>
+        </div>
+      </div>
+      <footer>为真实的交流而设计 <span>LINCHAT / 01</span></footer>
+    </section>
+    <section class="auth-panel">
+      <button class="text-button auth-switch" @click="openModal('connection')"><Icon name="globe" :size="17" /> 切换服务端</button>
+      <div class="auth-form-wrap">
+        <span class="pill"><span class="live-dot"></span>{{ networkMode }}</span>
+        <h2>{{ !initialized ? '创建你的聊天空间' : authMode === 'register' ? '加入你们的对话' : '欢迎回来' }}</h2>
+        <p class="muted">{{ !initialized ? '首次使用，设置管理员账号。' : authMode === 'register' ? '使用管理员的邀请，创建自己的账号。' : '登录 ' + serverName + '，继续未完的对话。' }}</p>
+        <form class="form" @submit.prevent="submitAuth">
+          <label v-if="!initialized || authMode === 'register'">{{ !initialized ? '初始化令牌' : '邀请码' }}<input v-model="form.token" autocomplete="off" required :placeholder="!initialized ? '从服务端的首次初始化地址获取' : '粘贴管理员提供的邀请码'" /></label>
+          <label>账号<input v-model="form.username" autocomplete="username" required pattern="[a-zA-Z0-9_]{3,32}" placeholder="字母、数字或下划线" /></label>
+          <label v-if="!initialized || authMode === 'register'">昵称<input v-model="form.nickname" autocomplete="nickname" required maxlength="30" placeholder="大家怎么称呼你？" /></label>
+          <label>密码<input v-model="form.password" type="password" :autocomplete="initialized && authMode === 'login' ? 'current-password' : 'new-password'" required :minlength="initialized && authMode === 'login' ? 1 : 10" maxlength="72" placeholder="请输入密码（新密码至少 10 位）" /></label>
+          <p v-if="error" class="error" role="alert">{{ error }}</p>
+          <button class="primary wide" :disabled="busy">{{ busy ? '正在连接…' : !initialized ? '创建空间' : authMode === 'register' ? '注册并加入' : '登录 LinChat' }}<Icon name="send" :size="17" /></button>
+        </form>
+        <p v-if="initialized" class="auth-alternative">{{ authMode === 'login' ? '收到了邀请？' : '已有账号？' }}<button class="text-button" @click="authMode = authMode === 'login' ? 'register' : 'login'; error = ''">{{ authMode === 'login' ? '创建账号' : '去登录' }}</button></p>
+        <div class="auth-foot"><Icon name="lock" :size="15" /><span>邀请制加入 · 独立数据空间</span></div>
+      </div>
+      <div class="auth-server">{{ location.host }}<span>LinChat 1.0</span></div>
+    </section>
+  </main>
+
+  <main v-else class="workspace" :class="{ 'mobile-chat': showMobileChat }">
+    <nav class="rail" aria-label="主导航">
+      <a class="rail-logo" href="/" title="LinChat"><img src="/favicon.svg" alt="LinChat" /></a>
+      <button class="rail-button active" title="消息" aria-label="消息" @click="showMobileChat = false"><Icon name="chat" /><span v-if="totalUnread" class="rail-unread"></span></button>
+      <button class="rail-button" title="通讯录" aria-label="通讯录" @click="openModal('directory')"><Icon name="users" /></button>
+      <button v-if="me.admin" class="rail-button" title="邀请成员" aria-label="邀请成员" @click="openModal('invite')"><Icon name="plus" /></button>
+      <div class="rail-bottom">
+        <button class="rail-button" title="服务端连接" aria-label="服务端连接" @click="openModal('connection')"><Icon name="globe" /></button>
+        <button class="rail-button" title="个人设置" aria-label="个人设置" @click="openModal('settings')"><Icon name="settings" /></button>
+        <button class="avatar me-avatar" :class="hue(me.id)" :title="me.nickname" aria-label="我的账号" @click="openModal('settings')">{{ avatar(me.nickname) }}</button>
+      </div>
+    </nav>
+    <aside class="conversation-panel">
+      <header class="list-heading"><div><span class="eyebrow">YOUR SPACE</span><h1>消息<span class="count-pill">{{ conversations.length }}</span></h1></div><button class="icon-button outlined" title="新建群聊" aria-label="新建群聊" @click="openModal('group')"><Icon name="plus" /></button></header>
+      <div class="search-box"><Icon name="search" :size="17" /><input v-model="query" aria-label="搜索会话" placeholder="搜索会话…" /><span>⌕</span></div>
+      <div class="list-subtitle"><span>全部会话</span><span>{{ onlineCount }} 人在线</span></div>
+      <div class="conversation-list">
+        <button v-for="c in filteredConversations" :key="c.id" class="conversation-row" :class="{ selected: currentID === c.id }" @click="selectConversation(c)">
+          <span class="avatar" :class="c.kind === 'lobby' ? 'dark' : hue(c.id)"><Icon v-if="c.kind === 'lobby'" name="globe" :size="22" /><Icon v-else-if="c.kind === 'group'" name="users" :size="21" /><template v-else>{{ avatar(c.name) }}</template></span>
+          <span class="conversation-text"><span class="conversation-title">{{ c.name }}<small>{{ time(c.last_at) }}</small></span><span class="preview">{{ c.preview }}<b v-if="c.unread" class="unread">{{ c.unread > 99 ? '99+' : c.unread }}</b></span></span>
+        </button>
+        <p v-if="!filteredConversations.length" class="small-empty">没有找到相关会话</p>
+      </div>
+      <div class="sidebar-tip"><Icon name="network" :size="19" /><div><b>同一份连接，不同的距离</b><span>云端 / 虚拟局域网，随时切换</span></div></div>
+      <button class="server-status" @click="openModal('connection')"><span class="status-dot" :class="{ offline: connection !== '实时在线' }"></span><span>{{ serverName }}<small>{{ connection }}</small></span><Icon name="globe" :size="17" /></button>
+    </aside>
+    <section class="chat-panel" @dragover.prevent="dragging = true" @dragleave.self="dragging = false" @drop.prevent="dropped">
+      <template v-if="current">
+        <header class="chat-header">
+          <button class="icon-button mobile-back" aria-label="返回会话列表" @click="showMobileChat = false"><Icon name="arrow" /></button>
+          <span class="avatar header-avatar" :class="hue(current.id)"><Icon v-if="current.kind !== 'direct'" name="users" /><template v-else>{{ avatar(current.name) }}</template></span>
+          <div class="chat-title"><h2>{{ current.name }}<span v-if="current.kind === 'lobby'" class="tag">公共空间</span></h2><p><span class="live-dot"></span>{{ current.member_count }} 位成员 <span class="dot-divider">·</span> {{ activeOnline }} 人在线</p></div>
+          <button class="icon-button" aria-label="会话成员" title="会话成员" @click="showDetails = !showDetails"><Icon name="users" /></button>
+          <button class="icon-button" aria-label="会话信息" title="会话信息" @click="openModal('members')"><Icon name="info" /></button>
+        </header>
+        <div v-if="connection !== '实时在线'" class="connection-banner"><span class="spinner"></span>{{ connection }}，待发送消息会保留在此设备上。<button class="text-button" @click="flushPending">重试发送</button></div>
+        <div class="chat-body">
+          <div ref="messageList" class="message-list" role="log" aria-label="聊天记录" @scroll.passive="markRead">
+            <button v-if="moreHistory" class="history-button" :disabled="loadingHistory" @click="older">{{ loadingHistory ? '加载中…' : '查看更早的消息' }}</button>
+            <div v-if="!messages.length && !pendingHere.length" class="chat-welcome"><span class="welcome-icon"><Icon name="chat" :size="30" /></span><h3>{{ loadingHistory ? '正在加载对话…' : '对话，从一句你好开始' }}</h3><p>{{ current.kind === 'lobby' ? '这里是大家的公共空间，打个招呼吧。' : '文字、图片、文件，让想法自由流动。' }}</p><span class="welcome-rule"></span></div>
+            <template v-for="(m, i) in messages" :key="m.id">
+              <div v-if="i === 0 || date(m.created_at) !== date(messages[i - 1].created_at)" class="date-separator"><span>{{ date(m.created_at) }}</span></div>
+              <article class="message" :class="{ own: m.sender_id === me.id }">
+                <span v-if="m.sender_id !== me.id" class="avatar small-avatar" :class="hue(m.sender_id)">{{ avatar(m.sender_name) }}</span>
+                <div class="message-content"><div class="message-meta"><b>{{ m.sender_id === me.id ? '我' : m.sender_name }}</b><time>{{ time(m.created_at) }}</time></div>
+                  <div v-if="m.kind === 'text'" class="bubble">{{ m.content }}</div>
+                  <a v-else-if="m.kind === 'image'" class="image-bubble" :href="`/api/files/${m.file_id}?download=1`" :download="m.file_name" :title="`下载 ${m.file_name}`"><img :src="`/api/files/${m.file_id}`" :alt="m.file_name" loading="lazy" @load="atBottom() && bottom()" /><span><Icon name="download" :size="14" />{{ m.file_name }}</span></a>
+                  <a v-else class="file-bubble" :href="`/api/files/${m.file_id}?download=1`" :download="m.file_name"><span class="file-icon"><Icon name="file" :size="25" /></span><span><b>{{ m.file_name }}</b><small>{{ bytes(m.file_size) }} · 点击下载</small></span><Icon name="download" :size="17" /></a>
+                  <span v-if="m.sender_id === me.id" class="message-receipt"><Icon name="check" :size="12" />{{ readCount(m) ? `${readCount(m)} 人已读` : '已发送' }}</span>
+                </div>
+              </article>
+            </template>
+            <article v-for="p in pendingHere" :key="p.client_id" class="message own pending"><div class="message-content"><div class="message-meta"><b>我</b><time>{{ time(p.created_at) }}</time></div><div class="bubble">{{ p.content }}</div><div class="message-receipt" :class="{ failed: p.error }"><template v-if="p.error"><span>{{ p.error }}</span><button @click="retry(p)">重试</button><button @click="discard(p)">取消</button></template><template v-else><span class="spinner"></span>发送中…</template></div></div></article>
+          </div>
+          <aside v-if="showDetails" class="details-panel"><div class="details-heading"><h3>会话成员</h3><button class="icon-button" aria-label="关闭成员列表" @click="showDetails = false"><Icon name="close" :size="16" /></button></div><button v-for="p in members" :key="p.id" class="member-row" :disabled="p.id === me.id" @click="direct(p)"><span class="avatar small-avatar" :class="hue(p.id)">{{ avatar(p.nickname) }}</span><span>{{ p.nickname }}<small>{{ p.online ? '在线' : '离线' }}</small></span><i class="status-dot" :class="{ offline: !p.online }"></i></button><button v-if="current.kind === 'group' && (current.owner_id === me.id || me.admin)" class="text-button add-members" @click="openModal('addMembers')"><Icon name="plus" :size="16" />添加成员</button></aside>
+        </div>
+        <div v-if="upload" class="upload-progress"><Icon name="file" :size="16" /><span>{{ upload.name }}</span><progress :value="upload.percent" max="100"></progress><b>{{ upload.percent }}%</b></div>
+        <div v-if="uploadRetry" class="upload-progress failed"><span>附件发送未确认：{{ uploadRetry.file.name }}</span><button class="text-button" @click="sendFile(uploadRetry.file, uploadRetry.cid, uploadRetry.clientID)">重试</button><button class="text-button" @click="uploadRetry = null">取消</button></div>
+        <footer class="composer-area">
+          <div class="composer-box"><textarea ref="composer" v-model="draft" :placeholder="`发送消息到 ${current.name}…`" aria-label="消息内容" rows="2" maxlength="8000" @keydown.enter="onEnter" @paste="paste"></textarea><div class="composer-tools"><div><button class="icon-button" :disabled="!!upload" aria-label="发送图片或文件" title="图片或文件（最大 25 MB）" @click="fileInput?.click()"><Icon name="attach" /></button><span class="composer-hint">Enter 发送 · Shift + Enter 换行</span></div><button class="send-button" :disabled="!draft.trim()" @click="send">发送<Icon name="send" :size="16" /></button></div></div>
+          <p class="composer-note"><Icon name="lock" :size="11" />仅会话成员可访问消息和附件</p>
+          <input ref="fileInput" type="file" class="visually-hidden" aria-label="选择文件" @change="pickFile" />
+        </footer>
+      </template>
+      <div v-else class="empty-space"><Icon name="chat" :size="48" /><h2>你的下一段对话，从这里开始</h2><button class="primary" @click="openModal('directory')">开始聊天</button></div>
+      <div v-if="dragging && current" class="drop-overlay"><Icon name="attach" :size="40" /><h3>松开以发送文件</h3><p>最大 {{ bytes(maxUpload) }}</p></div>
+    </section>
+  </main>
+
+  <div v-if="modal" class="modal-backdrop" @click.self="modal = ''" @keydown.esc="modal = ''">
+    <section class="modal" role="dialog" aria-modal="true" :aria-label="{directory:'通讯录',group:'新建群聊',invite:'邀请成员',settings:'个人设置',connection:'服务端连接',members:'会话成员',addMembers:'添加群成员'}[modal]">
+      <header class="modal-header"><div><span class="eyebrow">LINCHAT SPACE</span><h2>{{ {directory:'通讯录',group:'新建群聊',invite:'邀请成员',settings:'个人设置',connection:'服务端连接',members:'会话成员',addMembers:'添加群成员'}[modal] }}</h2></div><button class="icon-button" aria-label="关闭弹窗" @click="modal = ''"><Icon name="close" /></button></header>
+      <p v-if="error" class="error" role="alert">{{ error }}</p>
+      <template v-if="modal === 'directory'">
+        <div class="search-box"><Icon name="search" :size="17" /><input v-model="directoryQuery" placeholder="搜索昵称或账号" aria-label="搜索成员" /></div>
+        <div class="member-picker"><button v-for="p in otherUsers" :key="p.id" class="member-row" @click="direct(p)"><span class="avatar" :class="hue(p.id)">{{ avatar(p.nickname) }}</span><span>{{ p.nickname }}<small>@{{ p.username }}</small></span><span class="member-online">{{ p.online ? '在线' : '离线' }}</span><Icon name="chat" :size="17" /></button><p v-if="!otherUsers.length" class="small-empty">暂时没有其他成员。管理员可以生成邀请链接。</p></div>
+      </template>
+      <form v-else-if="modal === 'group' || modal === 'addMembers'" class="form" @submit.prevent="saveGroup">
+        <label v-if="modal === 'group'">群聊名称<input v-model="groupName" required maxlength="40" placeholder="给你们的讨论空间起个名字" /></label>
+        <label>选择成员 <small class="muted">已选 {{ selectedUsers.length }} 人</small></label>
+        <div class="member-picker"><label v-for="p in groupCandidates" :key="p.id" class="member-row"><span class="avatar small-avatar" :class="hue(p.id)">{{ avatar(p.nickname) }}</span><span>{{ p.nickname }}<small>@{{ p.username }}</small></span><input v-model="selectedUsers" type="checkbox" :value="p.id" :aria-label="`选择 ${p.nickname}`" /></label><p v-if="!groupCandidates.length" class="small-empty">暂无可添加的成员</p></div>
+        <button class="primary wide" :disabled="busy || !selectedUsers.length">{{ busy ? '保存中…' : modal === 'group' ? '创建群聊' : '添加成员' }}</button>
+      </form>
+      <template v-else-if="modal === 'invite'">
+        <p class="muted modal-description">把邀请链接发送给伙伴。加入后，每个人都有独立账号，并自动进入公共大厅。</p>
+        <form class="form" @submit.prevent="createInvite"><label>可使用人数<input v-model.number="inviteUses" type="number" min="1" max="100" required /></label><p class="helper">邀请有效期 7 天。Radmin 模式下，伙伴需要先加入同一个 VPN 网络。</p><button class="primary wide" :disabled="busy">{{ busy ? '生成中…' : '生成邀请链接' }}<Icon name="plus" :size="17" /></button></form>
+        <div v-if="inviteLink" class="invite-result"><label>邀请链接<textarea :value="inviteLink" readonly rows="3" aria-label="邀请链接"></textarea></label><button class="text-button" @click="copy(inviteLink)"><Icon name="copy" :size="16" />复制邀请链接</button></div>
+      </template>
+      <form v-else-if="modal === 'settings'" class="form" @submit.prevent="saveProfile">
+        <div class="profile-heading"><span class="avatar large-avatar" :class="hue(me?.id || 0)">{{ avatar(me?.nickname || '') }}</span><div><b>{{ me?.nickname }}</b><p>@{{ me?.username }}<span v-if="me?.admin" class="tag">管理员</span></p></div></div>
+        <label>昵称<input v-model="profile.nickname" required maxlength="30" /></label>
+        <details><summary>修改密码</summary><label>当前密码<input v-model="profile.old_password" type="password" autocomplete="current-password" /></label><label>新密码<input v-model="profile.new_password" type="password" autocomplete="new-password" minlength="10" maxlength="72" placeholder="至少 10 位" /></label></details>
+        <button class="primary wide" :disabled="busy">保存设置</button>
+        <div class="settings-actions"><button type="button" class="text-button" @click="notifications"><Icon name="bell" :size="16" />开启通知</button><button type="button" class="text-button danger" @click="logout"><Icon name="logout" :size="16" />退出登录</button></div>
+      </form>
+      <template v-else-if="modal === 'connection'">
+        <div class="connection-card"><span class="avatar mint"><Icon :name="networkMode.includes('Radmin') ? 'network' : 'cloud'" /></span><div><b>{{ networkMode }}</b><span>{{ location.origin }}</span></div><span class="status-dot"></span></div>
+        <p class="muted modal-description">云端和 Radmin 使用同一套聊天功能。独立部署的服务端各自保存账号与聊天记录；切换地址后需登录对应服务端。</p>
+        <button v-if="desktop" class="primary wide" style="margin-bottom:20px" @click="desktop.openConnections()"><Icon name="network" :size="17" />打开桌面连接中心</button>
+        <form class="form" @submit.prevent="switchServer()"><label>连接名称<input v-model="connectionLabel" placeholder="例如：云端空间 / 家里的 Radmin" maxlength="40" /></label><label>服务端地址<input v-model="connectionURL" type="url" required placeholder="https://chat.linblog.site" /></label><p class="helper">Radmin 地址示例：http://26.1.2.3:8787。地址由运行服务端的电脑提供。</p><button class="primary wide">连接此服务端<Icon name="globe" :size="17" /></button></form>
+        <div v-if="recentServers.length" class="recent-servers"><h3>此浏览器保存的地址</h3><button v-for="s in recentServers" :key="s.url" @click="switchServer(s.url)"><Icon name="globe" :size="16" /><span>{{ s.name }}<small>{{ s.url }}</small></span><Icon name="send" :size="15" /></button></div>
+      </template>
+      <template v-else-if="modal === 'members'">
+        <p class="muted modal-description">{{ current?.name }} · {{ members.length }} 位成员</p>
+        <div class="member-picker"><div v-for="p in members" :key="p.id" class="member-row"><span class="avatar small-avatar" :class="hue(p.id)">{{ avatar(p.nickname) }}</span><span>{{ p.nickname }}<small>{{ p.id === current?.owner_id ? '创建者' : '成员' }}</small></span><span class="member-online">{{ p.online ? '在线' : '离线' }}</span></div></div>
+        <button v-if="current?.kind === 'group' && (current.owner_id === me?.id || me?.admin)" class="primary wide" @click="openModal('addMembers')">添加成员<Icon name="plus" :size="17" /></button>
+      </template>
+    </section>
+  </div>
+  <div v-if="toast" class="toast" role="status"><Icon name="info" :size="17" />{{ toast }}</div>
+</template>

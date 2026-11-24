@@ -1,0 +1,62 @@
+{
+  "name": "linchat-desktop",
+  "version": "1.0.0",
+  "description": "LinChat — 云端与 Radmin 虚拟局域网兼容的多人实时通讯",
+  "author": "LinChat",
+  "private": true,
+  "main": "desktop/main.cjs",
+  "scripts": {
+    "icons": "node scripts/icons.cjs",
+    "build:web": "npm --prefix web run build",
+    "build:server": "node scripts/build-server.cjs",
+    "build": "npm run icons && npm run build:web && npm run build:server",
+    "dev": "electron .",
+    "package": "npm run build && electron-builder --win nsis portable --x64",
+    "package:dir": "npm run build && electron-builder --win --dir",
+    "test:desktop": "electron scripts/desktop-smoke.cjs"
+  },
+  "devDependencies": {
+    "electron": "^40.0.0",
+    "electron-builder": "^26.0.0",
+    "playwright-core": "^1.65.1"
+  },
+  "build": {
+    "appId": "site.linblog.linchat",
+    "productName": "LinChat",
+    "electronDist": "node_modules/electron/dist",
+    "directories": {
+      "output": "dist/desktop",
+      "buildResources": "desktop/assets"
+    },
+    "files": [
+      "desktop/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "dist/server/linchat-windows-amd64.exe",
+        "to": "server/linchat-server.exe"
+      }
+    ],
+    "asar": true,
+    "win": {
+      "icon": "desktop/assets/icon.ico",
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "signExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "LinChat",
+      "artifactName": "LinChat-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "LinChat-Portable-${version}.${ext}"
+    }
+  }
+}
