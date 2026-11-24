@@ -22,13 +22,29 @@
 
 ## 快速使用（Windows）
 
-构建后的文件：
+### 一键安装
+
+**[下载 LinChat 1.0.1 一键安装包](https://github.com/Lin-6499/ChatForPlay/releases/download/v1.0.1/LinChat-Setup-1.0.1.exe)**
+
+1. 下载 `LinChat-Setup-1.0.1.exe`。
+2. 双击运行，自动安装并创建桌面、开始菜单快捷方式，完成后自动打开 LinChat。
+3. 点击预置的 **“LinChat 云端”**，用自己的账号登录。新成员先使用管理员发来的邀请链接注册。
+
+适用于 Windows 10/11 64 位，安装到当前 Windows 用户目录，普通使用无需安装 Node.js、Go 或执行编译命令。
+
+**如果下载的是 GitHub 源码 ZIP：** 先完整解压，再双击根目录的 **`一键安装使用.cmd`** 或 **`启动LinChat.cmd`**。脚本会自动获取对应版本的安装包、验证 SHA-256、安装并启动；已安装同版或更新版本时直接打开。
+
+安装脚本优先使用本地完整安装包或已校验的下载缓存，首次在线下载约 103 MB。缓存位于 `%LOCALAPPDATA%\LinChat\downloads\`，网络失败时窗口会显示原因和直接下载地址。
+
+[查看发行版本与便携版](https://github.com/Lin-6499/ChatForPlay/releases/latest)
+
+开发者本地构建后的文件：
 
 ```text
-dist/desktop/LinChat-Setup-1.0.0.exe       安装版
-dist/desktop/LinChat-Portable-1.0.0.exe    便携版
-dist/server/linchat-windows-amd64.exe     独立 Windows 服务端
-dist/server/linchat-linux-amd64           独立 Linux 服务端
+dist/desktop/1.0.1/LinChat-Setup-1.0.1.exe       一键安装版
+dist/desktop/1.0.1/LinChat-Portable-1.0.1.exe    便携版
+dist/server/linchat-windows-amd64.exe           独立 Windows 服务端
+dist/server/linchat-linux-amd64                 独立 Linux 服务端
 ```
 
 ### 连接云端
@@ -98,7 +114,7 @@ setup-token        仅首次初始化前存在
 
 ## 本地开发
 
-要求：Node.js 22.12+、Go 1.26+、Windows x64（本项目桌面打包目标）。
+要求：Node.js 22.19+、Go 1.26+、Windows x64（本项目桌面打包目标）。
 
 ```powershell
 cd E:\LinChat
@@ -151,6 +167,28 @@ node scripts/cloud-check.cjs
 
 Radmin 和内网地址在 LinChat 自己的网络会话中使用直连，避免被电脑的 HTTP 系统代理误转发；云端优先使用系统网络设置，遇到代理或连接故障时尝试直连，始终保留 TLS 证书验证。
 
+### 发布桌面安装包
+
+更新根目录 `package.json` 及锁文件中的版本，构建并验证后运行：
+
+```powershell
+npm run release:manifest
+git add .
+git commit -m "Release desktop installer"
+git push origin main
+npm run release:publish
+```
+
+`release:manifest` 生成用于源码一键安装的 `desktop-release.json`，包括对应版本的下载地址、大小和 SHA-256；该文件需要随源码提交。构建产物保存在 `dist/desktop/<版本>/`。
+
+`release:publish` 使用已登录的 Git Credential Manager 凭据，或当前进程中的 `GH_TOKEN` / `GITHUB_TOKEN`，创建 GitHub Release 草稿，上传安装版、便携版及校验文件。GitHub 返回的文件摘要全部一致后才公开发布。已公开的版本使用新版本号发布，凭据不会写入项目文件。
+
+发布后可验证实际公网下载链路：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-and-start.ps1 -DownloadOnly -ForceDownload
+```
+
 ## 架构
 
 ```text
@@ -175,6 +213,9 @@ Electron（连接中心 / 托盘 / 通知 / 本机主机生命周期）
 | `desktop/main.cjs` | Electron 主进程、托盘、IPC、内置服务端 |
 | `desktop/preload.cjs` | 隔离的桌面桥接接口 |
 | `desktop/index.html`、`launcher.js`、`launcher.css` | 桌面连接中心 |
+| `一键安装使用.cmd`、`启动LinChat.cmd` | 普通用户一键安装与启动入口 |
+| `scripts/install-and-start.ps1` | 安装检测、下载安装包、SHA-256 校验和启动 |
+| `desktop-release.json` | 固定版本安装包的下载地址与校验信息 |
 | `web/src/App.vue` | 登录、聊天、通讯录、群组、设置界面 |
 | `main.go` | 服务端启动、配置、HTTP 路由、嵌入前端 |
 | `auth.go` | 身份验证、会话、邀请、限速 |

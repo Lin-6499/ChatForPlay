@@ -2,10 +2,12 @@ const fs = require('node:fs')
 const path = require('node:path')
 const crypto = require('node:crypto')
 const root = path.resolve(__dirname, '..')
+const { version } = require(path.join(root, 'package.json'))
+const desktopDirectory = `dist/desktop/${version}`
 const files = [
-  'dist/desktop/LinChat-Setup-1.0.0.exe',
-  'dist/desktop/LinChat-Portable-1.0.0.exe',
-  'dist/desktop/win-unpacked/LinChat.exe',
+  `${desktopDirectory}/LinChat-Setup-${version}.exe`,
+  `${desktopDirectory}/LinChat-Portable-${version}.exe`,
+  `${desktopDirectory}/win-unpacked/LinChat.exe`,
   'dist/server/linchat-windows-amd64.exe',
   'dist/server/linchat-linux-amd64',
 ]
@@ -16,8 +18,14 @@ const files = [
     for await (const b of fs.createReadStream(full)) h.update(b)
     artifacts.push({ path: file, bytes: fs.statSync(full).size, sha256: h.digest('hex') })
   }
-  const manifest = { version: '1.0.0', created: new Date().toISOString(), cloud: 'https://chat.linblog.site', artifacts,
+  const manifest = { version, created: new Date().toISOString(), cloud: 'https://chat.linblog.site', artifacts,
     verification: ['dist/verification/desktop-smoke-results.json', 'dist/verification/cloud-check-results.json', 'dist/verification/packaged-check-results.json'] }
   fs.writeFileSync(path.join(root, 'dist', 'release-manifest.json'), JSON.stringify(manifest, null, 2))
+  const installer = artifacts[0]
+  const filename = path.basename(installer.path)
+  const desktop = { version, filename, bytes: installer.bytes, sha256: installer.sha256,
+    url: `https://github.com/Lin-6499/ChatForPlay/releases/download/v${version}/${filename}` }
+  fs.writeFileSync(path.join(root, 'desktop-release.json'), JSON.stringify(desktop, null, 2) + '\n')
+  fs.writeFileSync(path.join(root, 'dist', 'SHA256SUMS.txt'), artifacts.slice(0, 2).map(a => `${a.sha256}  ${path.basename(a.path)}`).join('\n') + '\n')
   console.log(JSON.stringify(manifest, null, 2))
 })().catch(e => { console.error(e); process.exitCode = 1 })

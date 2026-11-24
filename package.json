@@ -1,6 +1,6 @@
 {
   "name": "linchat-desktop",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "LinChat — 云端与 Radmin 虚拟局域网兼容的多人实时通讯",
   "author": "LinChat",
   "private": true,
@@ -13,19 +13,22 @@
     "dev": "electron .",
     "package": "npm run build && electron-builder --win nsis portable --x64",
     "package:dir": "npm run build && electron-builder --win --dir",
-    "test:desktop": "electron scripts/desktop-smoke.cjs"
+    "test:desktop": "electron scripts/desktop-smoke.cjs",
+    "release:manifest": "node scripts/release-manifest.cjs",
+    "release:publish": "node scripts/publish-release.cjs"
   },
   "devDependencies": {
     "electron": "^40.0.0",
     "electron-builder": "^26.0.0",
-    "playwright-core": "^1.65.1"
+    "playwright-core": "^1.65.1",
+    "undici": "^8.13.1"
   },
   "build": {
     "appId": "site.linblog.linchat",
     "productName": "LinChat",
     "electronDist": "node_modules/electron/dist",
     "directories": {
-      "output": "dist/desktop",
+      "output": "dist/desktop/${version}",
       "buildResources": "desktop/assets"
     },
     "files": [
@@ -48,8 +51,10 @@
       "signExecutable": false
     },
     "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
+      "oneClick": true,
+      "perMachine": false,
+      "allowElevation": false,
+      "runAfterFinish": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "LinChat",

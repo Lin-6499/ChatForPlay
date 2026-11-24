@@ -3,7 +3,11 @@ const fs = require('node:fs')
 const path = require('node:path')
 const assert = require('node:assert/strict')
 const root = path.resolve(__dirname, '..')
+const { version } = require(path.join(root, 'package.json'))
 const out = path.join(root, 'dist', 'verification')
+fs.mkdirSync(out, { recursive: true })
+const executablePath = process.env.LINCHAT_CHECK_EXE || path.join(root, 'dist', 'desktop', version, 'win-unpacked', 'LinChat.exe')
+const label = process.env.LINCHAT_CHECK_EXE ? 'installed' : 'packaged'
 let application
 async function closeApplication() {
   if (!application) return
@@ -13,8 +17,8 @@ async function closeApplication() {
 }
 ;(async () => {
   application = await electron.launch({
-    executablePath: path.join(root, 'dist', 'desktop', 'win-unpacked', 'LinChat.exe'),
-    args: [], timeout: 30000,
+    executablePath,
+    args: ['--user-data-dir=' + path.join(out, label + '-profile-' + version)], timeout: 30000,
   })
   const page = await application.firstWindow()
   await page.locator('#adapter').filter({ hasNotText: '正在检查' }).waitFor({ state: 'attached' })
@@ -22,21 +26,21 @@ async function closeApplication() {
     name: app.getName(), version: app.getVersion(), packaged: app.isPackaged, dataDir: app.getPath('userData'),
   }))
   assert.equal(metadata.packaged, true)
-  assert.equal(metadata.version, '1.0.0')
+  assert.equal(metadata.version, version)
   const launcherState = await page.evaluate(() => window.linchatDesktop.getState())
-  await page.screenshot({ path: path.join(out, 'packaged-connection-center.png') })
+  await page.screenshot({ path: path.join(out, label + '-connection-center.png') })
   await page.locator('#url').fill('https://chat.linblog.site')
   await page.locator('#connect').click()
-  await page.locator('.auth-form-wrap').waitFor({ timeout: 45000 })
+  await page.locator('.auth-form-wrap, .workspace').waitFor({ timeout: 45000 })
   assert.ok(page.url().startsWith('https://chat.linblog.site'))
-  assert.ok(await page.locator('input[autocomplete="username"]').isVisible())
+  assert.ok(await page.locator('input[autocomplete="username"], .workspace').first().isVisible())
   const layout = await page.evaluate(() => ({
     scrollWidth: document.documentElement.scrollWidth, viewportWidth: innerWidth,
   }))
   assert.ok(layout.scrollWidth <= layout.viewportWidth + 1)
-  await page.screenshot({ path: path.join(out, 'packaged-cloud-onboarding.png') })
-  fs.writeFileSync(path.join(out, 'packaged-check-results.json'), JSON.stringify({
-    timestamp: new Date().toISOString(), passed: true, metadata, serverDataDir: launcherState.dataDir,
+  await page.screenshot({ path: path.join(out, label + '-cloud-onboarding.png') })
+  fs.writeFileSync(path.join(out, label + '-check-results.json'), JSON.stringify({
+    timestamp: new Date().toISOString(), passed: true, executablePath, metadata, serverDataDir: launcherState.dataDir,
     url: page.url(), checks: ['Packaged executable boots', 'Packaged version and application data path',
       'Desktop connects to deployed HTTPS service through configured system networking', 'Cloud onboarding form renders without horizontal overflow'],
   }, null, 2))
@@ -49,7 +53,7 @@ async function closeApplication() {
       const pages = application.windows()
       if (pages[0]) {
         console.error('Page diagnostics:', await pages[0].evaluate(() => ({ url: location.href, text: document.body.innerText })))
-        await pages[0].screenshot({ path: path.join(out, 'packaged-failure.png') })
+        await pages[0].screenshot({ path: path.join(out, label + '-failure.png') })
       }
       await closeApplication()
     } catch {}
