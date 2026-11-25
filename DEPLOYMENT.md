@@ -10,6 +10,7 @@
 
 ## 1.2.2 应用内自动更新与深色配色
 
+- 已发布：[LinChat 1.2.2](https://github.com/Lin-6499/ChatForPlay/releases/tag/v1.2.2)，发行源码提交 `0b32c32`。9 个附件的大小和 SHA-256 均经 GitHub 确认。
 - 安装版采用 `electron-updater 6.8.11`：后台下载、SHA-512 校验、下载进度及失败重试；下载完成后点击“重启并更新”，通过 NSIS 静默安装并自动重启。
 - 安装路径固定为当前程序所在目录。首次安装保留可选目录向导；便携版与开发环境提供下载安装版入口。
 - 重启前再次校验缓存安装包并等待内置服务有序退出；超时中止更新。重启后恢复原本的本机／Radmin 主机和聊天连接。
@@ -18,7 +19,11 @@
 - Go 测试与 vet、13 项 JS／配色测试、13 项 Electron 回归和 13 项娱乐场景通过。打包后的正式 EXE 已通过 GitHub 版本检查和云端 HTTPS 登录页检查。
 - 正式安装包：107,514,125 字节；SHA-256：`4723703e08d451587d90c67cca5b7e3b1bdbbb86986192b442d42c46cee733d1`。`latest.yml` 中的版本、文件大小及 SHA-512 已与最终安装包交叉校验。
 - 正式 app.asar 的 15 个桌面文件与源码一致、内置服务端与验证二进制一致、测试入口未打包。结果：`dist/verification/build-binding.json`。
-- 待正式发布和本机引导升级。1.2.1 及更早版本需先升级一次 1.2.2，之后可在应用内自动更新。
+- 已使用 Windows PowerShell 5.1 从正式地址完整下载安装包，大小与 SHA-256 校验通过。公开 `latest.yml`、blockmap 及全部 9 个附件再次校验通过；旧客户端收到更新，当前版本不重复提醒。结果：`dist/verification/published-update-check.json`。
+- 本机从 **1.2.0 静默升级至 1.2.2** 并重新打开，安装位置仍为 `C:\Users\Administrator\AppData\Local\Programs\linchat-desktop\LinChat.exe`。安装期间原用户目录 88 个文件逐一 SHA-256 对比完全一致；EXE、app.asar、内置服务端和更新配置与最终构建一致。结果：`dist/verification/installer-results.json`。
+- 本机升级前完整用户数据备份：自动更新工作树的 `dist/verification/profile-before-1.2.2-20261125-113841`，交付副本位于 `E:\LinChat\dist\verification\auto-update-1.2.2`。
+- 实际安装版通过独立验证配置访问公开更新源（`autoUpdate: true`、当前／最新版本均为 `1.2.2`、无错误），并连接云端 HTTPS 登录页。结果：`dist/verification/installed-check-results.json`。
+- 1.2.1 及更早版本需先升级一次 1.2.2，之后可在应用内自动更新；本机这次引导升级已代为完成。
 - 云端及服务端协议版本仍为 1.2.0；本次桌面更新不要求云端先升级。旧云端页面的 `openUpdate()` 入口兼容新版客户端，也可从托盘查看下载进度和执行重启。
 
 ## 1.2.1 自定义安装位置（桌面更新）

@@ -128,6 +128,7 @@ async function digest(file) {
     console.log(`Uploaded and SHA-256 verified: ${name}`)
   }
   release = await api(`/releases/${release.id}`, 'PATCH', { draft: false, make_latest: 'true' })
+  assets = await api(`/releases/${release.id}/assets`)
   const report = { version, commit, release: release.html_url, publishedAt: release.published_at,
     assets: assets.map(asset => ({ name: asset.name, size: asset.size, digest: asset.digest, url: asset.browser_download_url })) }
   fs.writeFileSync(path.join(root, 'dist', 'github-release.json'), JSON.stringify(report, null, 2) + '\n')
