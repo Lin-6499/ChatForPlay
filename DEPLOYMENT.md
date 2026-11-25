@@ -8,6 +8,16 @@
 - 云端目标：腾讯云 `43.138.138.136`，`chat.linblog.site`
 - Radmin 本机网卡：`26.232.226.141`
 
+## 1.2.1 自定义安装位置（桌面更新）
+
+- Windows 安装器改为当前用户安装向导，支持“浏览”或输入目标目录；升级时默认显示已登记的安装位置。
+- `一键安装使用.cmd` 始终进入同版／新版安装向导，支持重新选择目录；`启动LinChat.cmd` 从 Windows 安装登记中识别程序路径并直接启动已安装的版本。
+- 安装器完成页控制是否运行；取消安装正常退出。安装包缓存位于 `%LOCALAPPDATA%\LinChat\downloads`，数据位于 `%APPDATA%\linchat-desktop`。
+- 安装包 `LinChat-Setup-1.2.1.exe`：107,176,264 字节；SHA-256：`7e31c054f54344016778fa62b06ead27d74ccf1971b56794a4fa5bd7cf7ce762`。
+- 已构建安装版与便携版；真实安装向导显示目录输入框、“浏览”和原安装路径。用户关闭了本次向导，本机安装版本仍为 1.2.0。截图和状态：`dist/verification/installer-directory.png`、`custom-installer-results.json`。
+- 打包 EXE 1.2.1 已通过启动、官方更新接口及云端 HTTPS 登录页检查。结果：`dist/verification/packaged-check-results.json`。
+- 本版更新桌面安装流程；内置及云端服务端为 1.2.0。
+
 ## 1.2.0 娱乐模式
 
 - 已发布：[LinChat 1.2.0](https://github.com/Lin-6499/ChatForPlay/releases/tag/v1.2.0)，发行源码提交 `9d64f18`。Windows 安装包 `LinChat-Setup-1.2.0.exe`，107,112,424 字节，SHA-256：`bd5581e213cc76af4ed94c753d946274e94eba632faa0c697e923b99d2a3f547`。

@@ -1,6 +1,6 @@
 {
   "name": "linchat-desktop",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "LinChat — 云端与 Radmin 虚拟局域网兼容的多人实时通讯",
   "author": "LinChat",
   "private": true,
@@ -55,9 +55,12 @@
       "signExecutable": false
     },
     "nsis": {
-      "oneClick": true,
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
       "perMachine": false,
+      "selectPerMachineByDefault": false,
       "allowElevation": false,
+      "include": "desktop/installer.nsh",
       "runAfterFinish": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,

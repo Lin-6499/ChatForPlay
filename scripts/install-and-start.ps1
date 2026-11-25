@@ -2,7 +2,8 @@
 param(
     [switch]$DownloadOnly,
     [switch]$ForceDownload,
-    [switch]$NoLaunch
+    [switch]$NoLaunch,
+    [switch]$Reinstall
 )
 
 $ErrorActionPreference = 'Stop'
@@ -26,7 +27,7 @@ function Get-InstalledApp {
     )
     foreach ($registryRoot in $registryRoots) {
         $entries = @(Get-ItemProperty -Path $registryRoot -ErrorAction SilentlyContinue |
-            Where-Object { $_.DisplayName -eq 'LinChat' -and $_.InstallLocation })
+            Where-Object { $_.DisplayName -match '^LinChat(?: \d+\.\d+\.\d+)?$' -and $_.InstallLocation })
         foreach ($entry in $entries) {
             $paths.Add((Join-Path $entry.InstallLocation 'LinChat.exe'))
         }
@@ -113,7 +114,7 @@ function Download-Installer($Manifest, [string]$Destination) {
 try {
     Write-Host ''
     Write-Host 'LinChat 一键安装与启动' -ForegroundColor Green
-    Write-Host '首次运行自动安装，之后双击即可打开。'
+    Write-Host '首次运行可选择安装位置；安装后双击“启动LinChat.cmd”即可打开。'
     Write-Host ''
     if (-not [Environment]::Is64BitOperatingSystem) {
         throw '此安装包需要 64 位 Windows。'
@@ -132,8 +133,9 @@ try {
     if ($manifest.url -cne $expectedURL) { throw '发行下载地址无效。' }
     $targetVersion = [version]"$($manifest.version).0"
     $installed = Get-InstalledApp
-    if ($installed -and $installed.Version -ge $targetVersion -and -not $DownloadOnly) {
-        Write-Step "已安装 LinChat $($installed.Version)，正在打开……"
+    if ($installed -and -not $DownloadOnly -and
+        ($installed.Version -gt $targetVersion -or ($installed.Version -eq $targetVersion -and -not $Reinstall))) {
+        Write-Step "已安装 LinChat $($installed.Version)：$($installed.Path)"
         if (-not $NoLaunch) { Start-Process -FilePath $installed.Path -WorkingDirectory (Split-Path $installed.Path) }
         exit 0
     }
@@ -163,18 +165,21 @@ try {
         exit 0
     }
 
-    Write-Step '正在为当前 Windows 用户安装，并创建桌面快捷方式……'
-    $process = Start-Process -FilePath $installer -ArgumentList @('/S', '/currentuser') -PassThru -Wait
+    Write-Step '即将打开安装向导，请选择安装位置，然后点击“安装”。'
+    $installerArguments = @('/currentuser')
+    if ($NoLaunch) { $installerArguments += '/NoLaunch' }
+    $process = Start-Process -FilePath $installer -ArgumentList $installerArguments -PassThru -Wait
+    if ($process.ExitCode -eq 1) {
+        Write-Step '已取消安装。再次运行本入口可以重新选择安装位置。'
+        exit 0
+    }
     if ($process.ExitCode -ne 0) { throw "安装程序返回错误代码 $($process.ExitCode)。" }
     $installed = Get-InstalledApp
     if (-not $installed -or $installed.Version -lt $targetVersion) {
         throw '未找到已安装的 LinChat。请打开发行页面，直接运行安装包。'
     }
     Write-Step "安装完成：$($installed.Path)"
-    if (-not $NoLaunch) {
-        Start-Process -FilePath $installed.Path -WorkingDirectory (Split-Path $installed.Path)
-        Write-Step 'LinChat 已启动。云端地址：https://chat.linblog.site'
-    }
+    Write-Step '可以从桌面或开始菜单打开 LinChat。云端地址：https://chat.linblog.site'
     exit 0
 } catch {
     Write-Host ''

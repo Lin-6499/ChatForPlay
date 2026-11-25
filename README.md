@@ -26,27 +26,29 @@
 
 ## 快速使用（Windows）
 
-### 一键安装
+### 安装并选择位置
 
-**[下载 LinChat 1.2.0 一键安装包](https://github.com/Lin-6499/ChatForPlay/releases/download/v1.2.0/LinChat-Setup-1.2.0.exe)**
+**[下载 LinChat 1.2.1 安装包](https://github.com/Lin-6499/ChatForPlay/releases/download/v1.2.1/LinChat-Setup-1.2.1.exe)**
 
-1. 下载 `LinChat-Setup-1.2.0.exe`。
-2. 双击运行，自动安装并创建桌面、开始菜单快捷方式，完成后自动打开 LinChat。
+1. 下载 `LinChat-Setup-1.2.1.exe`。
+2. 双击运行，在安装向导中点击**浏览**或直接输入路径，例如 `D:\应用\LinChat`，再点击**安装**。安装后创建桌面、开始菜单快捷方式；最后一页可选择是否立即运行。
 3. 点击预置的 **“LinChat 云端”**，用自己的账号登录。新成员先使用管理员发来的邀请链接注册。
 
-适用于 Windows 10/11 64 位，安装到当前 Windows 用户目录，普通使用无需安装 Node.js、Go 或执行编译命令。
+适用于 Windows 10/11 64 位，为当前 Windows 用户安装，支持自选有写入权限的磁盘和文件夹，普通使用无需安装 Node.js、Go 或执行编译命令。
 
-**如果下载的是 GitHub 源码 ZIP：** 先完整解压，再双击根目录的 **`一键安装使用.cmd`** 或 **`启动LinChat.cmd`**。脚本会自动获取对应版本的安装包、验证 SHA-256、安装并启动；已安装同版或更新版本时直接打开。
+**如果下载的是 GitHub 源码 ZIP：** 先完整解压，再双击根目录的 **`一键安装使用.cmd`**。脚本自动获取对应版本的安装包、验证 SHA-256，再打开可选择路径的安装向导。**`启动LinChat.cmd`** 会直接打开已安装的同版或更新版本，未安装时才显示安装向导。
 
-安装脚本优先使用本地完整安装包或已校验的下载缓存，首次在线下载约 102 MB。缓存位于 `%LOCALAPPDATA%\LinChat\downloads\`，网络失败时窗口会显示原因和直接下载地址。
+**修改已有安装位置：** 重新运行同版或新版安装包，或双击 `一键安装使用.cmd`，在向导中选择新路径。向导默认显示原位置，安装后会更新快捷方式。账号、连接设置与本机聊天数据保存在 `%APPDATA%\linchat-desktop`，与程序安装目录分开。
+
+安装脚本优先使用本地完整安装包或已校验的下载缓存，首次在线下载约 103 MB。安装包缓存位于 `%LOCALAPPDATA%\LinChat\downloads\`；这是下载缓存，程序安装位置由向导选择。网络失败时窗口会显示原因和直接下载地址。
 
 [查看发行版本与便携版](https://github.com/Lin-6499/ChatForPlay/releases/latest)
 
 开发者本地构建后的文件：
 
 ```text
-dist/desktop/1.2.0/LinChat-Setup-1.2.0.exe       一键安装版
-dist/desktop/1.2.0/LinChat-Portable-1.2.0.exe    便携版
+dist/desktop/1.2.1/LinChat-Setup-1.2.1.exe       可选择安装目录的安装版
+dist/desktop/1.2.1/LinChat-Portable-1.2.1.exe    便携版
 dist/server/linchat-windows-amd64.exe           独立 Windows 服务端
 dist/server/linchat-linux-amd64                 独立 Linux 服务端
 ```
