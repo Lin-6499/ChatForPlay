@@ -1,5 +1,21 @@
+import { initializeAppearance } from './theme.mjs'
+import { mountAppearance } from './appearance.mjs'
+
 const api = window.linchatDesktop
 const $ = id => document.getElementById(id)
+void initializeAppearance(api)
+let disposeAppearance
+$('open-appearance').addEventListener('click', () => {
+  disposeAppearance?.()
+  disposeAppearance = mountAppearance($('appearance-editor'))
+  $('appearance-dialog').showModal()
+})
+$('close-appearance').addEventListener('click', () => $('appearance-dialog').close())
+$('appearance-dialog').addEventListener('close', () => { disposeAppearance?.(); disposeAppearance = undefined })
+$('appearance-dialog').addEventListener('click', e => {
+  const bounds = e.currentTarget.getBoundingClientRect()
+  if (e.target === e.currentTarget && (e.clientX < bounds.left || e.clientX > bounds.right || e.clientY < bounds.top || e.clientY > bounds.bottom)) e.currentTarget.close()
+})
 let state, busy = false, toastTimer
 function toast(text) { $('toast').textContent = text; $('toast').hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => $('toast').hidden = true, 3000) }
 function error(e) { $('error').textContent = e.message.replace(/^Error invoking remote method '[^']+': Error: /, ''); $('error').hidden = false }
@@ -9,7 +25,7 @@ function renderHost(host) {
   $('host-card').hidden = !host.running
   $('start-radmin').disabled = host.running || host.starting || busy
   $('start-local').disabled = host.running || host.starting || busy
-  $('start-radmin').textContent = host.starting ? '正在启动…' : '启动 Radmin 聊天主机 →'
+  $('start-radmin').textContent = host.starting ? '正在启动…' : '启动 Radmin 聊天主机'
   $('host-url').textContent = host.url
   $('enter-host').textContent = host.setupURL ? '初始化聊天空间' : '打开聊天空间'
   if (host.error) error(new Error(host.error))
@@ -19,11 +35,19 @@ function renderProfiles() {
   for (const p of state.profiles) {
     const row = document.createElement('div'); row.className = 'profile'
     const button = document.createElement('button'); button.className = 'profile-connect'
-    const icon = document.createElement('span'); icon.className = 'profile-icon'; icon.textContent = p.url.startsWith('https:') ? '☁' : '⌘'
+    const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+    icon.setAttribute('viewBox', '0 0 24 24'); icon.classList.add('profile-icon'); icon.setAttribute('aria-hidden', 'true')
+    const shape = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+    shape.setAttribute('d', p.url.startsWith('https:') ? 'M7 18a5 5 0 1 1 1.1-9.9A6 6 0 0 1 19.5 9 4.5 4.5 0 0 1-.5 9H7Z' : 'M8 3h8v6H8zM2 15h8v6H2zM14 15h8v6h-8zM12 9v3M6 15v-3h12v3')
+    icon.append(shape)
     const label = document.createElement('span'), title = document.createElement('b'), url = document.createElement('small')
     title.textContent = p.name; url.textContent = p.url; label.append(title, url); button.append(icon, label)
     button.addEventListener('click', () => connect(p.url, p.name))
-    const remove = document.createElement('button'); remove.className = 'remove-profile'; remove.textContent = '×'
+    const remove = document.createElement('button'); remove.className = 'remove-profile'
+    const removeIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+    removeIcon.setAttribute('viewBox', '0 0 24 24'); removeIcon.setAttribute('aria-hidden', 'true')
+    const cross = document.createElementNS('http://www.w3.org/2000/svg', 'path'); cross.setAttribute('d', 'm6 6 12 12M6 18 18 6')
+    removeIcon.append(cross); remove.append(removeIcon)
     remove.title = '移除保存的连接'; remove.setAttribute('aria-label', '移除 ' + p.name)
     remove.addEventListener('click', async () => { state.profiles = await api.removeProfile(p.url); renderProfiles() })
     row.append(button, remove); $('profiles').append(row)
@@ -33,7 +57,7 @@ async function connect(url, name) {
   if (busy) return
   busy = true; clearError(); $('connect').disabled = true; $('connect').textContent = '正在连接…'
   try { await api.connect(url, name) } catch (e) { error(e) }
-  finally { busy = false; $('connect').disabled = false; $('connect').textContent = '进入聊天空间 ↗' }
+  finally { busy = false; $('connect').disabled = false; $('connect').textContent = '进入聊天空间' }
 }
 document.querySelectorAll('[data-tab]').forEach(button => {
   button.addEventListener('click', () => {

@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Icon from './Icon.vue'
 import Entertainment from './Entertainment.vue'
+import AppearanceSettings from './AppearanceSettings.vue'
 import { editMentions, mentionQuery, prepareText, messageParts, type Mention, type DraftMention } from './mentions'
 
 interface User { id: number; username: string; nickname: string; admin: boolean; online: boolean; last_read?: number }
@@ -9,7 +10,7 @@ interface Conversation { id: number; kind: string; name: string; owner_id: numbe
 interface Message { id: number; conversation_id: number; sender_id: number; sender_name: string; client_id: string; kind: string; content: string; file_id?: string; file_name?: string; file_size?: number; file_mime?: string; created_at: number; mentions?: Mention[] }
 interface Pending { client_id: string; conversation_id: number; content: string; created_at: number; mentions?: Mention[]; error?: string; retryable?: boolean }
 interface Page { messages: Message[]; more: boolean }
-type Modal = '' | 'directory' | 'group' | 'invite' | 'settings' | 'connection' | 'members' | 'addMembers'
+type Modal = '' | 'directory' | 'group' | 'invite' | 'settings' | 'appearance' | 'connection' | 'members' | 'addMembers'
 class ApiError extends Error { constructor(message: string, public status: number) { super(message) } }
 
 const location = window.location
@@ -56,6 +57,29 @@ const pendingHere = computed(() => pending.value.filter(p => p.conversation_id =
 const totalUnread = computed(() => conversations.value.reduce((n, c) => n + c.unread, 0))
 const networkMode = /^26\./.test(location.hostname) ? 'Radmin 虚拟局域网' : location.hostname === '127.0.0.1' || location.hostname === 'localhost' ? '本地服务' : '云端连接'
 const activeOnline = computed(() => members.value.filter(p => p.online).length)
+const modalElement = ref<HTMLElement>()
+let modalTrigger: HTMLElement | null = null
+watch(modal, async (value, previous) => {
+  if (value && !previous) modalTrigger = document.activeElement as HTMLElement
+  await nextTick()
+  if (value) modalElement.value?.focus()
+  else if (modalTrigger?.isConnected) modalTrigger.focus()
+})
+function trapModalFocus(event: KeyboardEvent) {
+  if (event.key !== 'Tab') return
+  const items = Array.from(modalElement.value?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), summary, a[href]') || [])
+    .filter(el => el.getClientRects().length)
+  const first = items[0], last = items.at(-1)
+  if (!first || !last) { event.preventDefault(); return }
+  if (!modalElement.value?.contains(document.activeElement)) { event.preventDefault(); (event.shiftKey ? last : first).focus() }
+  else if (event.shiftKey && (document.activeElement === first || document.activeElement === modalElement.value)) { event.preventDefault(); last.focus() }
+  else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
+}
+function onModalKey(event: KeyboardEvent) {
+  if (!modal.value) return
+  if (event.key === 'Escape') { event.preventDefault(); modal.value = '' }
+  else trapModalFocus(event)
+}
 
 async function api<T = any>(path: string, method = 'GET', body?: unknown, timeout = 20000): Promise<T> {
   const controller = new AbortController(), timer = setTimeout(() => controller.abort(), timeout)
@@ -525,11 +549,13 @@ onMounted(async () => {
   } catch (e) { error.value = explain(e) }
   ready.value = true
   document.addEventListener('visibilitychange', onVisible)
+  document.addEventListener('keydown', onModalKey)
 })
 onBeforeUnmount(() => {
   offUpdate?.()
   intentionalClose = true; ws?.close(); clearTimeout(reconnectTimer); clearTimeout(refreshTimer); clearTimeout(toastTimer)
   document.removeEventListener('visibilitychange', onVisible)
+  document.removeEventListener('keydown', onModalKey)
 })
 </script>
 
@@ -539,23 +565,23 @@ onBeforeUnmount(() => {
     <Icon name="download" :size="20" /><div><b>LinChat v{{ desktopUpdate.latestVersion }} {{ desktopUpdate.status === 'ready' ? '已就绪' : '可更新' }}</b><p>{{ updateDetail }}</p></div><button class="text-button" :disabled="updateBusy" @click="openDesktopUpdate">{{ updateAction }}</button><button class="icon-button" aria-label="暂时关闭更新提醒" @click="dismissedUpdate = desktopUpdate.latestVersion"><Icon name="close" :size="16" /></button>
   </aside>
   <div v-if="!ready" class="loading-screen"><img src="/favicon.svg" alt="" width="56" /><p>正在连接 LinChat…</p></div>
-  <main v-else-if="!me" class="auth-page">
+  <main v-else-if="!me" class="auth-page" :inert="modal ? true : undefined">
     <section class="auth-story">
       <a class="brand" href="/"><img src="/favicon.svg" alt="" /><span>LinChat<span class="brand-dot">.</span></span></a>
       <div class="story-content">
-        <span class="eyebrow"><span class="live-dot"></span> SAME CONVERSATION. ANYWHERE.</span>
         <h1>距离远一点，<br />交流<span>近一点。</span></h1>
         <p>一处属于你们的交流空间。<br />从云端到虚拟局域网，让每一句话及时抵达。</p>
         <div class="story-conversation">
+          <p class="story-example-label">对话示例</p>
           <div class="story-message"><span class="avatar peach">林</span><div>无论在哪里，都可以一起聊。<small>刚刚 · 已送达</small></div></div>
           <div class="story-message reply"><div>我们在这里，连接成功！<small>刚刚 <Icon name="check" :size="12" /></small></div><span class="avatar mint">友</span></div>
           <div class="network-line"><span><Icon name="cloud" :size="16" /> 云端</span><i></i><Icon name="chat" /><i></i><span><Icon name="network" :size="16" /> Radmin VPN</span></div>
         </div>
       </div>
-      <footer>为真实的交流而设计 <span>LINCHAT / 01</span></footer>
+      <footer>为真实的交流而设计 <span>云端 / Radmin</span></footer>
     </section>
     <section class="auth-panel">
-      <button class="text-button auth-switch" @click="openModal('connection')"><Icon name="globe" :size="17" /> 切换服务端</button>
+      <div class="auth-actions"><button class="text-button" @click="openModal('appearance')"><Icon name="palette" :size="17" />外观</button><button class="text-button auth-switch" @click="openModal('connection')"><Icon name="globe" :size="17" /> 切换服务端</button></div>
       <div class="auth-form-wrap">
         <span class="pill"><span class="live-dot"></span>{{ networkMode }}</span>
         <h2>{{ !initialized ? '创建你的聊天空间' : authMode === 'register' ? '加入你们的对话' : '欢迎回来' }}</h2>
@@ -571,11 +597,11 @@ onBeforeUnmount(() => {
         <p v-if="initialized" class="auth-alternative">{{ authMode === 'login' ? '收到了邀请？' : '已有账号？' }}<button class="text-button" @click="authMode = authMode === 'login' ? 'register' : 'login'; error = ''">{{ authMode === 'login' ? '创建账号' : '去登录' }}</button></p>
         <div class="auth-foot"><Icon name="lock" :size="15" /><span>邀请制加入 · 独立数据空间</span></div>
       </div>
-      <div class="auth-server">{{ location.host }}<span>LinChat 1.0</span></div>
+      <div class="auth-server">{{ location.host }}<span>LinChat</span></div>
     </section>
   </main>
 
-   <main v-else class="workspace" :class="{ 'mobile-chat': showMobileChat && !entertainment, 'entertainment-workspace': entertainment }">
+   <main v-else class="workspace" :inert="modal ? true : undefined" :class="{ 'mobile-chat': showMobileChat && !entertainment, 'entertainment-workspace': entertainment }">
     <nav class="rail" aria-label="主导航">
       <a class="rail-logo" href="/" title="LinChat"><img src="/favicon.svg" alt="LinChat" /></a>
        <button class="rail-button" :class="{ active: !entertainment }" title="消息" aria-label="消息" @click="entertainment = false; showMobileChat = false"><Icon name="chat" /><span v-if="totalUnread" class="rail-unread"></span></button>
@@ -583,6 +609,7 @@ onBeforeUnmount(() => {
       <button class="rail-button" title="通讯录" aria-label="通讯录" @click="openModal('directory')"><Icon name="users" /></button>
       <button v-if="me.admin" class="rail-button" title="邀请成员" aria-label="邀请成员" @click="openModal('invite')"><Icon name="plus" /></button>
       <div class="rail-bottom">
+        <button class="rail-button" title="外观与配色" aria-label="外观与配色" @click="openModal('appearance')"><Icon name="palette" /></button>
         <button class="rail-button" title="服务端连接" aria-label="服务端连接" @click="openModal('connection')"><Icon name="globe" /></button>
         <button class="rail-button" title="个人设置" aria-label="个人设置" @click="openModal('settings')"><Icon name="settings" /></button>
         <button class="avatar me-avatar" :class="hue(me.id)" :title="me.nickname" aria-label="我的账号" @click="openModal('settings')">{{ avatar(me.nickname) }}</button>
@@ -593,8 +620,8 @@ onBeforeUnmount(() => {
      </KeepAlive>
      <template v-if="!entertainment">
      <aside class="conversation-panel">
-      <header class="list-heading"><div><span class="eyebrow">YOUR SPACE</span><h1>消息<span class="count-pill">{{ conversations.length }}</span></h1></div><button class="icon-button outlined" title="新建群聊" aria-label="新建群聊" @click="openModal('group')"><Icon name="plus" /></button></header>
-      <div class="search-box"><Icon name="search" :size="17" /><input v-model="query" aria-label="搜索会话" placeholder="搜索会话…" /><span>⌕</span></div>
+      <header class="list-heading"><h1>消息<span class="count-pill">{{ conversations.length }}</span></h1><button class="icon-button outlined" title="新建群聊" aria-label="新建群聊" @click="openModal('group')"><Icon name="plus" /></button></header>
+      <div class="search-box"><Icon name="search" :size="17" /><input v-model="query" aria-label="搜索会话" placeholder="搜索会话…" /></div>
       <div class="list-subtitle"><span>全部会话</span><span>{{ onlineCount }} 人在线</span></div>
       <div class="conversation-list">
         <button v-for="c in filteredConversations" :key="c.id" class="conversation-row" :class="{ selected: currentID === c.id }" @click="selectConversation(c)">
@@ -603,7 +630,6 @@ onBeforeUnmount(() => {
         </button>
         <p v-if="!filteredConversations.length" class="small-empty">没有找到相关会话</p>
       </div>
-      <div class="sidebar-tip"><Icon name="network" :size="19" /><div><b>同一份连接，不同的距离</b><span>云端 / 虚拟局域网，随时切换</span></div></div>
       <button class="server-status" @click="openModal('connection')"><span class="status-dot" :class="{ offline: connection !== '实时在线' }"></span><span>{{ serverName }}<small>{{ connection }}</small></span><Icon name="globe" :size="17" /></button>
     </aside>
     <section class="chat-panel" @dragover.prevent="dragging = true" @dragleave.self="dragging = false" @drop.prevent="dropped">
@@ -663,8 +689,8 @@ onBeforeUnmount(() => {
    </main>
 
   <div v-if="modal" class="modal-backdrop" @click.self="modal = ''" @keydown.esc="modal = ''">
-    <section class="modal" role="dialog" aria-modal="true" :aria-label="{directory:'通讯录',group:'新建群聊',invite:'邀请成员',settings:'个人设置',connection:'服务端连接',members:'会话成员',addMembers:'添加群成员'}[modal]">
-      <header class="modal-header"><div><span class="eyebrow">LINCHAT SPACE</span><h2>{{ {directory:'通讯录',group:'新建群聊',invite:'邀请成员',settings:'个人设置',connection:'服务端连接',members:'会话成员',addMembers:'添加群成员'}[modal] }}</h2></div><button class="icon-button" aria-label="关闭弹窗" @click="modal = ''"><Icon name="close" /></button></header>
+    <section ref="modalElement" class="modal" :class="{ 'appearance-modal': modal === 'appearance' }" role="dialog" aria-modal="true" tabindex="-1" :aria-label="{directory:'通讯录',group:'新建群聊',invite:'邀请成员',settings:'个人设置',appearance:'外观与配色',connection:'服务端连接',members:'会话成员',addMembers:'添加群成员'}[modal]">
+      <header class="modal-header"><h2>{{ {directory:'通讯录',group:'新建群聊',invite:'邀请成员',settings:'个人设置',appearance:'外观与配色',connection:'服务端连接',members:'会话成员',addMembers:'添加群成员'}[modal] }}</h2><button class="icon-button" aria-label="关闭弹窗" @click="modal = ''"><Icon name="close" /></button></header>
       <p v-if="error" class="error" role="alert">{{ error }}</p>
       <template v-if="modal === 'directory'">
         <div class="search-box"><Icon name="search" :size="17" /><input v-model="directoryQuery" placeholder="搜索昵称或账号" aria-label="搜索成员" /></div>
@@ -683,12 +709,14 @@ onBeforeUnmount(() => {
       </template>
       <form v-else-if="modal === 'settings'" class="form" @submit.prevent="saveProfile">
         <div class="profile-heading"><span class="avatar large-avatar" :class="hue(me?.id || 0)">{{ avatar(me?.nickname || '') }}</span><div><b>{{ me?.nickname }}</b><p>@{{ me?.username }}<span v-if="me?.admin" class="tag">管理员</span></p></div></div>
+        <button type="button" class="appearance-link" @click="openModal('appearance')"><Icon name="palette" /><span><b>外观与配色</b><small>主题预设与自定义颜色</small></span><Icon name="arrow-right" :size="17" /></button>
         <label>昵称<input v-model="profile.nickname" required maxlength="30" /></label>
         <details><summary>修改密码</summary><label>当前密码<input v-model="profile.old_password" type="password" autocomplete="current-password" /></label><label>新密码<input v-model="profile.new_password" type="password" autocomplete="new-password" minlength="10" maxlength="72" placeholder="至少 10 位" /></label></details>
         <button class="primary wide" :disabled="busy">保存设置</button>
         <div class="settings-actions"><button type="button" class="text-button" @click="notifications"><Icon name="bell" :size="16" />开启通知</button><button type="button" class="text-button danger" @click="logout"><Icon name="logout" :size="16" />退出登录</button></div>
         <div v-if="desktop?.checkUpdates" class="desktop-version"><span>桌面版 v{{ desktopUpdate?.currentVersion || '…' }}</span><button type="button" class="text-button" :disabled="desktopUpdate?.checking" @click="checkDesktopUpdate">{{ desktopUpdate?.checking ? '检查中…' : '检查更新' }}</button></div>
       </form>
+      <AppearanceSettings v-else-if="modal === 'appearance'" />
       <template v-else-if="modal === 'connection'">
         <div class="connection-card"><span class="avatar mint"><Icon :name="networkMode.includes('Radmin') ? 'network' : 'cloud'" /></span><div><b>{{ networkMode }}</b><span>{{ location.origin }}</span></div><span class="status-dot"></span></div>
         <p class="muted modal-description">云端和 Radmin 使用同一套聊天功能。独立部署的服务端各自保存账号与聊天记录；切换地址后需登录对应服务端。</p>

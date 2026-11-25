@@ -21,5 +21,7 @@ interface Window {
     openUpdate?(): Promise<DesktopUpdateState | void>
     installUpdate?(): Promise<DesktopUpdateState>
     onUpdateState?(callback: (state: DesktopUpdateState) => void): () => void
+    getAppearance?(): Promise<import('../../desktop/theme.mjs').Appearance | null>
+    setAppearance?(value: import('../../desktop/theme.mjs').Appearance): Promise<import('../../desktop/theme.mjs').Appearance>
   }
 }

@@ -248,8 +248,9 @@ app.on('before-quit', event => {
   }
 })
 app.on('window-all-closed', () => { if (quitting) app.quit() })
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   if (!gotLock) return
+  const { normalizeAppearance, normalizeColor } = await import('./theme.mjs')
   app.setAppUserModelId('site.linblog.linchat')
   readProfiles()
   const partition = session.fromPartition('persist:linchat')
@@ -261,7 +262,7 @@ app.whenReady().then(() => {
     contents === win?.webContents && permission === 'notifications' && requestingOrigin === selectedOrigin)
   win = new BrowserWindow({
     width: 1280, height: 850, minWidth: 820, minHeight: 600, show: false,
-    title: 'LinChat · 让交流近一点', backgroundColor: '#f4f6f0', icon: iconPath,
+    title: 'LinChat · 让交流近一点', backgroundColor: '#111615', icon: iconPath,
     autoHideMenuBar: true,
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false,
       sandbox: true, webSecurity: true, partition: 'persist:linchat', spellcheck: false },
@@ -372,6 +373,20 @@ app.whenReady().then(() => {
   ipcMain.handle('updates:check', event => { requireDesktopPage(event); return updater.check() })
   ipcMain.handle('updates:open', event => { requireDesktopPage(event); return updater.open() })
   ipcMain.handle('updates:install', event => { requireDesktopPage(event); return updater.install() })
+  ipcMain.handle('appearance:get', event => {
+    requireDesktopPage(event)
+    try { return normalizeAppearance(JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'appearance.json'), 'utf8'))) }
+    catch { return null }
+  })
+  ipcMain.handle('appearance:set', (event, value) => {
+    requireDesktopPage(event)
+    if (!value || !['accent', 'background', 'panel'].every(key => normalizeColor(value[key]))) throw new Error('配色无效，请输入 HEX 色值')
+    const appearance = normalizeAppearance(value)
+    fs.mkdirSync(app.getPath('userData'), { recursive: true })
+    fs.writeFileSync(path.join(app.getPath('userData'), 'appearance.json'), JSON.stringify(appearance, null, 2), 'utf8')
+    win.setBackgroundColor(appearance.background)
+    return appearance
+  })
   ipcMain.handle('launcher:state', event => {
     requireLauncher(event)
     if (hostState.setupURL && !fs.existsSync(path.join(hostData(), '首次初始化.txt'))) hostState.setupURL = ''

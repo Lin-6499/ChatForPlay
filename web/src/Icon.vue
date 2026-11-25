@@ -25,6 +25,7 @@ const paths: Record<string, string> = {
   network: 'M8 3h8v6H8zM2 15h8v6H2zM14 15h8v6h-8zM12 9v3M6 15v-3h12v3',
   bell: 'M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4',
   download: 'M12 3v12m-5-5 5 5 5-5M5 17v4h14v-4',
+  palette: 'M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1.6-3.2 1.5 1.5 0 0 1 1.2-2.4H17a4 4 0 0 0 4-4A8.7 8.7 0 0 0 12 3ZM7.5 10h.01M10 6.5h.01M15 7h.01M17.5 10.5h.01',
 }
 </script>
 <template>

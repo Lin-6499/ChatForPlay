@@ -24,7 +24,7 @@ function pixel(x, y) {
   if (rounded(x, y, 24, 24, 40, 27, 1.5) || rounded(x, y, 24, 31, 35, 34, 1.5)) c = [24, 62, 54, 255]
   return c
 }
-function png(size) {
+function png(size, origin = '') {
   const raw = Buffer.alloc(size * (size * 4 + 1))
   for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
     const sums = [0, 0, 0, 0]
@@ -35,11 +35,13 @@ function png(size) {
     for (let k = 0; k < 4; k++) raw[y * (size * 4 + 1) + 1 + x * 4 + k] = Math.round(sums[k] / 16)
   }
   const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(size, 0); ihdr.writeUInt32BE(size, 4); ihdr[8] = 8; ihdr[9] = 6
-  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))])
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr),
+    ...(origin ? [chunk('tEXt', Buffer.from('impeccable:prompt\0' + origin, 'utf8'))] : []),
+    chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))])
 }
-fs.writeFileSync(path.join(dir, 'icon.png'), png(256))
-fs.writeFileSync(path.join(dir, 'tray.png'), png(32))
-const sizes = [16, 32, 48, 64, 128, 256], images = sizes.map(png)
+fs.writeFileSync(path.join(dir, 'icon.png'), png(256, 'Origin: existing LinChat logo, deterministically rendered by scripts/icons.cjs; retained unchanged by the dark appearance redesign. No generated image model was used.'))
+fs.writeFileSync(path.join(dir, 'tray.png'), png(32, 'Origin: existing LinChat tray icon, deterministically rendered by scripts/icons.cjs; retained unchanged by the dark appearance redesign. No generated image model was used.'))
+const sizes = [16, 32, 48, 64, 128, 256], images = sizes.map(size => png(size))
 const head = Buffer.alloc(6 + 16 * sizes.length); head.writeUInt16LE(1, 2); head.writeUInt16LE(sizes.length, 4)
 let offset = head.length
 sizes.forEach((size, i) => {
