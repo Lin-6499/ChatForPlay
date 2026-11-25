@@ -1,8 +1,13 @@
 import { initializeAppearance } from './theme.mjs'
 import { mountAppearance } from './appearance.mjs'
+import { startScrollMemory } from './scroll-memory.mjs'
 
 const api = window.linchatDesktop
 const $ = id => document.getElementById(id)
+$('profiles').dataset.scrollKey = 'launcher/profiles'
+$('appearance-dialog').dataset.scrollKey = 'launcher/appearance'
+document.documentElement.dataset.scrollKey = 'launcher/page'
+startScrollMemory()
 void initializeAppearance(api)
 let disposeAppearance
 $('open-appearance').addEventListener('click', () => {

@@ -75,6 +75,13 @@ func (a *app) claimGame(cid int64, g gameActor) (*gameTurn, error) {
 	if c.Phase == "paused" {
 		return nil, gameFail(409, "战役已暂停")
 	}
+	var pendingChecks int
+	if err := tx.QueryRow("SELECT COUNT(*) FROM campaign_checks WHERE campaign_id=? AND (status='awaiting_choice' OR (status='prepared' AND turn_id=0))", cid).Scan(&pendingChecks); err != nil {
+		return nil, err
+	}
+	if pendingChecks > 0 && c.ActiveTurn == 0 {
+		return nil, gameFail(409, "请先完成已锁定检定或等待玩家选择代价")
+	}
 	if (g.actorKey == "builtin" && c.Mode != "builtin") || (g.actorKey != "builtin" && c.Mode != "external") {
 		return nil, gameFail(403, "主持模式已改变")
 	}
@@ -174,6 +181,19 @@ func (a *app) completeGame(cid, turnID int64, g gameActor, in gameCompleteInput)
 			return nil, gameFail(409, "状态版本已变化")
 		}
 		o := in.Outcome
+		var unrolled, awaiting int
+		if err := tx.QueryRow("SELECT COUNT(*) FROM campaign_checks WHERE campaign_id=? AND turn_id=? AND status='prepared'", cid, turnID).Scan(&unrolled); err != nil {
+			return nil, err
+		}
+		if unrolled > 0 {
+			return nil, gameFail(409, "请先投掷本回合已锁定的检定")
+		}
+		if err := tx.QueryRow("SELECT COUNT(*) FROM campaign_checks WHERE campaign_id=? AND status='awaiting_choice'", cid).Scan(&awaiting); err != nil {
+			return nil, err
+		}
+		if awaiting > 0 {
+			o.Phase = "awaiting_roll"
+		}
 		if !textOK(o.Narration, 1, 8000) || !textOK(o.Summary, 0, 8000) || len(o.Changes) > 50 {
 			return nil, gameFail(400, "主持结果为空或过长")
 		}
@@ -185,6 +205,16 @@ func (a *app) completeGame(cid, turnID int64, g gameActor, in gameCompleteInput)
 		}
 		seen := map[int64]bool{}
 		for _, change := range o.Changes {
+			if err := pendingCharacterCheck(tx, cid, change.ID); err != nil {
+				return nil, err
+			}
+			var applied int
+			if err := tx.QueryRow("SELECT COUNT(*) FROM campaign_checks WHERE campaign_id=? AND turn_id=? AND character_id=? AND status='resolved'", cid, turnID, change.ID).Scan(&applied); err != nil {
+				return nil, err
+			}
+			if applied > 0 {
+				return nil, gameFail(409, "该角色的检定后果已由软件应用，不得重复修改资源")
+			}
 			if seen[change.ID] {
 				return nil, gameFail(400, "同一角色只能更新一次")
 			}

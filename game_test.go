@@ -137,7 +137,7 @@ func TestCampaignSecretsScopesAndDurableDice(t *testing.T) {
 	}
 	var schema int
 	reopened.QueryRow("PRAGMA user_version").Scan(&schema)
-	if schema != 3 {
+	if schema != 4 {
 		t.Fatal("campaign migration missing")
 	}
 }

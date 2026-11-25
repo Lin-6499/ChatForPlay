@@ -45,7 +45,7 @@
 .game-scene > p, .game-summary p { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.9; font-size: 13px; padding-bottom: 16px; max-width: 72ch; }
 .game-summary { border-top: 1px solid var(--line); padding-top: 12px; }
 .game-summary h3 { font-size: 13px; margin-bottom: 6px; }
-.game-journal { flex: 1; overflow-y: auto; min-height: 0; padding: 28px 30px; overscroll-behavior: contain; }
+.game-journal { flex: 1; overflow-y: auto; overflow-anchor: none; min-height: 0; padding: 28px 30px; overscroll-behavior: contain; }
 .game-entry { margin: 0 auto 30px; max-width: 74ch; }
 .game-entry-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); line-height: 1.6; margin-bottom: 9px; }
 .game-entry-meta b { font-size: 12px; color: var(--text); }
@@ -83,6 +83,30 @@
 .game-section-heading p { font-size: 12px; line-height: 1.8; color: var(--muted); margin-top: 7px; }
 .game-empty-small { font-size: 13px; line-height: 1.9; padding: 30px 14px; color: var(--muted); }
 .game-form { display: flex; flex-direction: column; gap: 17px; max-width: 760px; }
+.ability-checks { max-width: 900px; }
+.check-rules { margin-bottom: 24px; color: var(--muted); font-size: 14px; line-height: 1.8; }
+.ability-checks summary { cursor: pointer; color: var(--accent-text); }
+.check-create { margin-block: 24px 36px; }
+.check-effect-fields { border: 1px solid var(--line); border-radius: 7px; padding: 16px; min-width: 0; display: grid; gap: 14px; }
+.check-effect-fields legend { padding-inline: 6px; font-size: 14px; font-weight: 600; }
+.check-effect-fields small { color: var(--muted); }
+.check-record { border: 1px solid var(--line); border-radius: 8px; padding: 20px; margin-block: 18px; overflow-wrap: anywhere; font-size: 14px; line-height: 1.8; }
+.check-record header { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
+.check-record h4 { font-size: 16px; }
+.check-record header p, .check-record header > span { color: var(--muted); }
+.check-record > p, .check-choice > p { margin-block: 12px; white-space: pre-wrap; }
+.check-result strong { color: var(--accent-text); margin-right: 10px; }
+.check-record .game-actions { margin-top: 16px; flex-wrap: wrap; }
+.check-consequences { display: grid; grid-template-columns: minmax(70px, auto) 1fr; gap: 8px 16px; margin-block: 16px; }
+.check-consequences dt { color: var(--muted); }
+.check-consequences dd { margin: 0; white-space: pre-wrap; }
+.check-choice { background: var(--raised); color: var(--raised-text); border: 1px solid var(--line); border-radius: 7px; padding: 16px; margin-top: 16px; }
+@media (max-width: 760px) {
+  .ability-checks .game-form input:not([type=checkbox]), .ability-checks .game-form textarea, .ability-checks .game-form select { font-size: 16px; }
+  .check-record { padding: 14px; }
+  .check-choice { padding: 12px; }
+  .check-choice .game-button { white-space: normal; min-height: 44px; }
+}
 .game-form label, .game-token-result label { display: flex; flex-direction: column; gap: 8px; font-size: 13px; font-weight: 500; line-height: 1.6; }
 .game-form input:not([type=checkbox]), .game-form select, .game-form textarea, .game-token-result input { width: 100%; min-width: 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 7px; background: var(--field); color: var(--text); line-height: 1.6; font-size: 13px; font-weight: 400; }
 .game-form textarea { resize: vertical; min-height: 65px; max-height: 380px; }

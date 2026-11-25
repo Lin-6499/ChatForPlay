@@ -62,6 +62,13 @@ func migrateGames(db *sql.DB) error {
 	  id INTEGER PRIMARY KEY CHECK(id=1), base_url TEXT NOT NULL, model TEXT NOT NULL,
 	  key_cipher TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 0
 	);
-	PRAGMA user_version=3;`)
+	CREATE TABLE IF NOT EXISTS campaign_checks (
+	  id INTEGER PRIMARY KEY, campaign_id INTEGER NOT NULL REFERENCES campaigns(id),
+	  event_id INTEGER NOT NULL REFERENCES campaign_events(id), character_id INTEGER NOT NULL REFERENCES characters(id),
+	  turn_id INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL, document TEXT NOT NULL,
+	  UNIQUE(campaign_id,event_id)
+	);
+	CREATE INDEX IF NOT EXISTS campaign_checks_pending ON campaign_checks(campaign_id,character_id,status);
+	PRAGMA user_version=4;`)
 	return err
 }

@@ -6,7 +6,7 @@ import { diceSpec } from './dice-geometry'
 import type { DiceInput, DiceReceipt } from './game-types'
 import './dice.css'
 
-const props = defineProps<{ isOwner: boolean; submit: (input: DiceInput) => Promise<DiceReceipt> }>()
+const props = defineProps<{ isOwner: boolean; submit: (input: DiceInput) => Promise<DiceReceipt>; scrollKey?: string }>()
 const form = defineModel<DiceInput>({ required: true })
 const emit = defineEmits<{ close: [] }>()
 const phase = ref<'ready' | 'rolling' | 'waiting' | 'settled' | 'error'>('ready')
@@ -95,7 +95,7 @@ function preset(value: string) {
 
 <template>
   <form class="dice-roll" @submit.prevent="roll">
-    <div class="dice-scroll">
+    <div class="dice-scroll" :data-scroll-key="scrollKey">
       <div ref="tray" class="dice-tray" :class="{ 'dice-revealed': revealed, 'dice-private': form.visibility === 'dm' && isOwner }" :data-phase="phase" :aria-busy="locked">
         <div class="dice-tray-heading">
           <span>{{ spec ? `${count} 枚 D${spec.sides}` : '自定义骰式' }}<span v-if="spec?.keep"> · {{ spec.keep === 'kh1' ? '保留最高' : '保留最低' }}</span></span>
@@ -117,7 +117,8 @@ function preset(value: string) {
       <p v-if="failure" class="game-error dice-error" role="alert">{{ failure }}<small>重试会复用本次请求，不会重复掷骰。</small></p>
       <details v-if="revealed && count > 6" class="dice-all-results"><summary>查看全部 {{ count }} 枚点数</summary><p>{{ revealed.roll.dice.join('、') }}</p><p>保留 {{ revealed.roll.kept.join('、') }} · 修正 {{ revealed.roll.modifier >= 0 ? '+' : '' }}{{ revealed.roll.modifier }}</p></details>
       <fieldset class="game-form dice-fields" :disabled="locked || !!revealed">
-        <label>检定目的<input v-model="form.reason" required maxlength="200" placeholder="例如：调查石门刻痕" /></label>
+        <p class="game-helper">这里是通用骰子，不计算分级房规。属性／技能检定请使用“行动检定”，先锁定 DC 与后果。</p>
+        <label>检定目的<input v-model="form.reason" required maxlength="200" placeholder="例如：攻击或伤害掷骰" /></label>
         <div class="game-form-row">
           <label>骰式<input v-model="form.formula" required maxlength="30" spellcheck="false" placeholder="1d20+5" :aria-invalid="!spec" aria-describedby="dice-formula-help" /></label>
           <label v-if="isOwner">可见范围<select v-model="form.visibility" aria-label="可见范围"><option value="public">所有战役成员</option><option value="dm">仅主持秘密</option></select></label>

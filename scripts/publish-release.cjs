@@ -15,7 +15,7 @@ const dispatcher = proxy ? new ProxyAgent(proxy) : undefined
 let token
 
 function git(args, input) {
-  const result = spawnSync('git', args, { cwd: root, input, encoding: 'utf8',
+  const result = spawnSync('git', args, { cwd: root, input, encoding: 'utf8', windowsHide: true,
     env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never' } })
   if (result.status !== 0) throw new Error(`Git ${args[0]} failed. Check GitHub sign-in and repository permissions.`)
   return result.stdout.trim()
