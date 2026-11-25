@@ -1,5 +1,14 @@
 # LinChat 部署记录
 
+## 2026-11-25 1.2.12云端补部署完成
+
+- GitHub发行已发布且9附件SHA-256全部验证。此前SSH间歇超时、服务器从GitHub下载过慢，未执行替换；改用单次SSH gzip传输5597172字节，远端解压后最终二进制与升级脚本哈希均匹配，确认运行中回合0后升级成功。
+- 备份：`/var/backups/linchat/update-20261125-182413-y3ZDC3/`。公网健康1.2.12；JS `index-pbuB3wju.js`、CSS `index-zW3ojgtc.css` 与本地产物逐字节一致。
+- Linux SHA-256 `7e018ad284e76e2baa47a037fe373f8ee73fadbf31e2497ebd2c1d05f77f1b0d`。SQLite完整性ok，schema8，原26张表记录保留（在线已读位置单独允许推进），包含84条消息、56条战役事件、4账号及4登录会话，模型密钥一致，新增4张节奏／诊断表。
+- 公网capabilities、host-diagnostics、flow匿名读取均为401。未写正式战役测试数据，未自动启用联合模式；此前逐人处理保持不变。
+- `/tmp/linchat-flow-DAZV1m/` 已清理，systemd active，长期SSH授权保留。证据：`dist/verification/flow/cloud.json`、`cloud-auth.json`；本地传输夹具为`deploy-stream.cjs`。
+- 三阶段功能均已实现、验收、发布及部署。外部Bot／MCP仍需用户更新到新版，服务端不能替外部客户端刷新工具清单。
+
 ## 2026-11-25 联合行动与接入自检（1.2.12构建完成，云端部署阻塞）
 
 - 第二、三阶段已实现并在隔离服务验收：全员收集联合回合、独立玩家检定归属、追加行动补充、实时队列与安全失败原因；版本／协议／能力发现、Bot启动／--check检查、房主私有活动诊断。
