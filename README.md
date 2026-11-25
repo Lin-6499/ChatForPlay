@@ -18,6 +18,8 @@
 - Electron 连接中心、保存服务端地址、托盘常驻、系统通知。
 - Electron 内置 Go 服务端，可一键启动 Radmin 主机或仅本机体验。
 - 桌面新版自动提醒，可在连接中心、托盘或个人设置中手动检查更新。
+- 娱乐模式：文字战役、角色卡、服务器掷骰、场景与摘要存档、私密资料和房主确认的设定提案。
+- 支持 Grok / OpenAI 兼容 API 主持、战役专用令牌、独立机器人与 stdio MCP 连接器。
 
 当前默认限制：每条文字 4,000 字符、每个附件 25 MiB、累计附件 5 GiB、自建群最多 100 人。
 这是初版工程配置上限，未将其作为实测并发容量保证。语音/视频通话不在本版功能内。
@@ -26,9 +28,9 @@
 
 ### 一键安装
 
-**[下载 LinChat 1.1.0 一键安装包](https://github.com/Lin-6499/ChatForPlay/releases/download/v1.1.0/LinChat-Setup-1.1.0.exe)**
+**[下载 LinChat 1.2.0 一键安装包](https://github.com/Lin-6499/ChatForPlay/releases/download/v1.2.0/LinChat-Setup-1.2.0.exe)**
 
-1. 下载 `LinChat-Setup-1.1.0.exe`。
+1. 下载 `LinChat-Setup-1.2.0.exe`。
 2. 双击运行，自动安装并创建桌面、开始菜单快捷方式，完成后自动打开 LinChat。
 3. 点击预置的 **“LinChat 云端”**，用自己的账号登录。新成员先使用管理员发来的邀请链接注册。
 
@@ -43,8 +45,8 @@
 开发者本地构建后的文件：
 
 ```text
-dist/desktop/1.1.0/LinChat-Setup-1.1.0.exe       一键安装版
-dist/desktop/1.1.0/LinChat-Portable-1.1.0.exe    便携版
+dist/desktop/1.2.0/LinChat-Setup-1.2.0.exe       一键安装版
+dist/desktop/1.2.0/LinChat-Portable-1.2.0.exe    便携版
 dist/server/linchat-windows-amd64.exe           独立 Windows 服务端
 dist/server/linchat-linux-amd64                 独立 Linux 服务端
 ```
@@ -70,6 +72,18 @@ dist/server/linchat-linux-amd64                 独立 Linux 服务端
 被提及的人在消息中看到 **“提到了你”** 和高亮名字，未读会话显示 **“@我”**。离线期间的提醒会保留到重新连接，阅读消息后清除未读标记。桌面最小化时会收到注明“@了你”的系统通知；网页系统通知需要网站通知权限。
 
 这项功能需要连接到 1.1.0 或更高版本的服务端。本机/Radmin 主机使用新版内置服务端，云端需由服务器管理员同步升级。
+
+### 娱乐模式与主持机器人
+
+点击左侧**骰子图标 → 娱乐模式 → 新建战役**。选择成员、固定规则版本，准备角色卡，再由房主继续战役。
+
+- 玩家通过**提交行动**或在战役群里 **@主持人**推进剧情；普通闲聊不触发模型。
+- 手动主持可直接使用；内置 AI 由服务器管理员在**模型设置**中配置自己的 API 地址、模型和密钥。
+- 外部智能体使用房主签发的战役专用令牌。仓库提供可运行的自动主持示例和 stdio MCP 连接器。
+- 秘密资料由服务端单独授权；内置公开主持只读取公开上下文。骰点由服务器产生并记录，失败重试保留已有骰点。
+- 结束本次时保存摘要，下次继续已有角色、资源、场景和日志。
+
+需要连接 **1.2.0 或以上的服务端**。详见 [娱乐模式、API 与 MCP 接入文档](docs/ENTERTAINMENT.md)。
 
 ### 桌面更新提醒
 
@@ -127,6 +141,7 @@ Electron 的浏览器登录会话保存在自身用户数据目录中。
 linchat.db          SQLite 数据库（账号、登录会话、邀请、会话、消息、文件元数据）
 linchat.db-wal      运行期间可能存在的 SQLite WAL
 linchat.db-shm      运行期间可能存在的 SQLite SHM
+ai-secret.key      模型凭据加密密钥，备份时必须保留
 files/             附件原文件
 setup-token        仅首次初始化前存在
 首次初始化.txt     仅首次初始化前存在，包含管理员一次性初始化地址

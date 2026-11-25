@@ -20,7 +20,7 @@ const files = [
     artifacts.push({ path: file, bytes: fs.statSync(full).size, sha256: h.digest('hex') })
   }
   const manifest = { version, created: new Date().toISOString(), cloud: 'https://chat.linblog.site', artifacts,
-    verification: ['dist/verification/desktop-smoke-results.json', 'dist/verification/cloud-check-results.json', 'dist/verification/packaged-check-results.json'] }
+    verification: ['dist/verification/desktop-smoke-results.json', 'dist/verification/entertainment-check-results.json', 'dist/verification/cloud-check-results.json', 'dist/verification/packaged-check-results.json'] }
   fs.writeFileSync(path.join(root, 'dist', 'release-manifest.json'), JSON.stringify(manifest, null, 2))
   const installer = artifacts[0]
   const filename = path.basename(installer.path)

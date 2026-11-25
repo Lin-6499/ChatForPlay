@@ -31,7 +31,7 @@ func testApp(t *testing.T) *fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { a.hub.close(); a.store.Close() })
+	t.Cleanup(func() { a.closeGames(); a.hub.close(); a.store.Close() })
 	s := httptest.NewServer(a.handler())
 	a.cfg.PublicURL = s.URL
 	f := &fixture{app: a, server: s, admin: testClient()}

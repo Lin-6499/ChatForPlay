@@ -392,6 +392,11 @@ func (a *app) sendMessage(w http.ResponseWriter, r *http.Request, u user) {
 			return
 		}
 	}
+	gameID, err := a.gameMention(tx, message{ID: mid, ConversationID: cid, SenderID: u.ID, Content: in.Content, Mentions: in.Mentions})
+	if err != nil {
+		fail(w, 409, err.Error())
+		return
+	}
 	if err = tx.Commit(); err != nil {
 		fail(w, 500, "保存消息失败")
 		return
@@ -402,6 +407,12 @@ func (a *app) sendMessage(w http.ResponseWriter, r *http.Request, u user) {
 		return
 	}
 	a.publishMessage(m)
+	if gameID != 0 {
+		if c, e := scanCampaign(a.store.QueryRow(campaignSelect+" WHERE id=?", gameID)); e == nil {
+			a.gameChanged(c)
+		}
+		a.kickGame(gameID)
+	}
 	writeJSON(w, 201, m)
 }
 

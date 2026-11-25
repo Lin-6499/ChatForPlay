@@ -28,7 +28,7 @@ recover() {
   systemctl stop linchat.service || true
   install -m 0755 "$backup/linchat.previous" /opt/linchat/bin/linchat
   systemctl start linchat.service || true
-  # The migration only adds a table/index, so the old program can still read the
+  # Migrations add tables/indexes, so the old program can still read the
   # data. Do not overwrite the database and lose messages accepted after startup.
   exit "${code:-1}"
 }

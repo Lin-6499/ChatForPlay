@@ -27,7 +27,7 @@ import (
 //go:embed all:web/dist
 var assets embed.FS
 
-const serverVersion = "1.1.0"
+const serverVersion = "1.2.0"
 
 type config struct {
 	Addr, DataDir, PublicURL, Name string
@@ -36,13 +36,19 @@ type config struct {
 }
 
 type app struct {
-	cfg        config
-	store      *store
-	hub        *hub
-	setupToken string
-	setupMu    sync.Mutex
-	uploadMu   sync.Mutex
-	limiter    *rateLimiter
+	cfg         config
+	store       *store
+	hub         *hub
+	setupToken  string
+	setupMu     sync.Mutex
+	uploadMu    sync.Mutex
+	limiter     *rateLimiter
+	gameWorkers sync.Map
+	gameMu      sync.Mutex
+	gameCtx     context.Context
+	gameCancel  context.CancelFunc
+	gameWG      sync.WaitGroup
+	gameKey     []byte
 }
 
 func env(key, fallback string) string {
@@ -83,6 +89,7 @@ func main() {
 		log.Fatal(err)
 	}
 	defer a.store.Close()
+	defer a.closeGames()
 	server := &http.Server{Addr: c.Addr, Handler: a.handler(), ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout: 2 * time.Minute, WriteTimeout: 2 * time.Minute, IdleTimeout: 90 * time.Second}
 	listener, err := net.Listen("tcp", c.Addr)
@@ -135,6 +142,10 @@ func newApp(c config) (*app, error) {
 		return nil, err
 	}
 	a := &app{cfg: c, store: s, hub: newHub(), limiter: newLimiter()}
+	if err = a.initGames(); err != nil {
+		s.Close()
+		return nil, err
+	}
 	var count int
 	if err = s.QueryRow("SELECT COUNT(*) FROM users").Scan(&count); err != nil {
 		s.Close()
@@ -161,6 +172,7 @@ func newApp(c config) (*app, error) {
 			}
 		}
 	}
+	a.resumeGames()
 	return a, nil
 }
 
@@ -192,6 +204,7 @@ func (a *app) handler() http.Handler {
 	m.Handle("POST /api/conversations/{id}/files", a.auth(a.uploadFile))
 	m.Handle("GET /api/files/{id}", a.auth(a.downloadFile))
 	m.Handle("GET /api/ws", a.auth(a.websocket))
+	a.registerGames(m)
 	m.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) { fail(w, 404, "接口不存在") })
 	staticFS, _ := fs.Sub(assets, "web/dist")
 	static := http.FileServer(http.FS(staticFS))

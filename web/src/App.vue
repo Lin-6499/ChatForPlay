@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import Icon from './Icon.vue'
+import Entertainment from './Entertainment.vue'
 import { editMentions, mentionQuery, prepareText, messageParts, type Mention, type DraftMention } from './mentions'
 
 interface User { id: number; username: string; nickname: string; admin: boolean; online: boolean; last_read?: number }
@@ -28,6 +29,7 @@ const uploadRetry = ref<{ file: File; cid: number; clientID: string } | null>(nu
 const messageList = ref<HTMLElement>(), composer = ref<HTMLTextAreaElement>(), fileInput = ref<HTMLInputElement>()
 const connectionURL = ref(''), connectionLabel = ref(''), recentServers = ref<{ name: string; url: string }[]>([])
 const dragging = ref(false)
+const entertainment = ref(/^#(?:entertainment|campaign=\d+)$/.test(location.hash)), gameRevision = ref(0)
 const draftMentions = ref<DraftMention[]>([]), mentionSearch = ref<ReturnType<typeof mentionQuery>>(null)
 const mentionIndex = ref(0), composing = ref(false), membersReady = ref(false)
 const canMention = computed(() => current.value?.kind === 'group' || current.value?.kind === 'lobby')
@@ -55,8 +57,8 @@ const totalUnread = computed(() => conversations.value.reduce((n, c) => n + c.un
 const networkMode = /^26\./.test(location.hostname) ? 'Radmin 虚拟局域网' : location.hostname === '127.0.0.1' || location.hostname === 'localhost' ? '本地服务' : '云端连接'
 const activeOnline = computed(() => members.value.filter(p => p.online).length)
 
-async function api<T = any>(path: string, method = 'GET', body?: unknown): Promise<T> {
-  const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 20000)
+async function api<T = any>(path: string, method = 'GET', body?: unknown, timeout = 20000): Promise<T> {
+  const controller = new AbortController(), timer = setTimeout(() => controller.abort(), timeout)
   try {
     const r = await fetch('/api' + path, { method, credentials: 'same-origin', signal: controller.signal,
       headers: { 'X-LinChat': '1', ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}) },
@@ -98,6 +100,12 @@ async function refreshConversations() {
 function scheduleRefresh() {
   clearTimeout(refreshTimer)
   refreshTimer = setTimeout(() => refreshConversations().catch(() => {}), 200)
+}
+let peopleVersion = 0
+async function refreshPeople() {
+  const version = ++peopleVersion
+  const list = await api<User[]>('/users')
+  if (version === peopleVersion) people.value = list
 }
 async function loadMembers(cid = currentID.value) {
   if (!cid) return
@@ -151,7 +159,7 @@ async function syncActive() {
   if (scroll) { await bottom(); await markRead() }
 }
 async function markRead() {
-  if (document.hidden || (!showMobileChat.value && matchMedia('(max-width:760px)').matches) || !atBottom() || !me.value) return
+  if (entertainment.value || document.hidden || (!showMobileChat.value && matchMedia('(max-width:760px)').matches) || !atBottom() || !me.value) return
   const cid = currentID.value, last = messages.value.at(-1)?.id
   if (!last || (readSent.get(cid) || 0) >= last) return
   readSent.set(cid, last)
@@ -164,7 +172,7 @@ async function enterApp() {
   me.value = await api<User>('/me')
   profile.value = { nickname: me.value.nickname, old_password: '', new_password: '' }
   try { pending.value = JSON.parse(localGet(pendingKey()) || '[]') } catch { pending.value = [] }
-  [people.value] = await Promise.all([api<User[]>('/users'), refreshConversations()])
+  await Promise.all([refreshPeople(), refreshConversations()])
   if (conversations.value.length) await selectConversation(conversations.value[0], false)
   showMobileChat.value = false
   intentionalClose = false; reconnectAttempt = 0
@@ -182,15 +190,16 @@ function connect() {
     try {
       const event = JSON.parse(e.data)
       if (event.type === 'hello') {
+        gameRevision.value++
         await Promise.all([refreshConversations(), syncActive(), loadMembers()])
-        people.value = await api<User[]>('/users')
+        await refreshPeople()
         for (const p of pending.value) if (p.retryable) p.error = ''
         await flushPending()
       } else if (event.type === 'message') {
         const m = event.message as Message
         const alreadyReceived = messages.value.some(item => item.id === m.id)
         const mentioned = mentionedMe(m)
-        const readingHere = m.conversation_id === currentID.value && atBottom() && !document.hidden &&
+        const readingHere = !entertainment.value && m.conversation_id === currentID.value && atBottom() && !document.hidden &&
           (showMobileChat.value || !matchMedia('(max-width:760px)').matches)
         if (m.conversation_id === currentID.value) {
           const scroll = atBottom(); mergeMessages([m])
@@ -222,8 +231,12 @@ function connect() {
           if (p) p.last_read = Math.max(p.last_read || 0, event.last_read)
         }
         if (event.user_id === me.value?.id) scheduleRefresh()
+      } else if (event.type === 'campaign.changed') {
+        gameRevision.value++; scheduleRefresh()
+        if (event.conversation_id === currentID.value) await syncActive()
       } else if (event.type === 'users.changed' || event.type === 'conversations.changed') {
-        [people.value] = await Promise.all([api<User[]>('/users'), refreshConversations(), loadMembers()])
+        gameRevision.value++
+        await Promise.all([refreshPeople(), refreshConversations(), loadMembers()])
       }
     } catch (e) { if (e instanceof ApiError && e.status === 401) sessionExpired() }
   }
@@ -390,6 +403,7 @@ function openModal(m: Modal) {
   if (m === 'settings' && me.value) profile.value = { nickname: me.value.nickname, old_password: '', new_password: '' }
   if (m === 'connection') { connectionURL.value = location.origin; connectionLabel.value = serverName.value }
   modal.value = m
+  if (m === 'group' || m === 'directory' || m === 'addMembers') void refreshPeople().catch(e => { error.value = explain(e) })
 }
 async function direct(p: User) {
   try {
@@ -466,6 +480,11 @@ async function notifications() {
 function onVisible() {
   if (!document.hidden && me.value) void Promise.all([syncActive(), refreshConversations()]).catch(() => {})
 }
+async function openCampaignChat(cid: number) {
+  await refreshConversations()
+  const target = conversations.value.find(c => c.id === cid)
+  if (target) { entertainment.value = false; await nextTick(); await selectConversation(target) }
+}
 onMounted(async () => {
   if (desktop?.getUpdateState) {
     desktopUpdate.value = await desktop.getUpdateState().catch(() => null)
@@ -535,10 +554,11 @@ onBeforeUnmount(() => {
     </section>
   </main>
 
-  <main v-else class="workspace" :class="{ 'mobile-chat': showMobileChat }">
+   <main v-else class="workspace" :class="{ 'mobile-chat': showMobileChat && !entertainment, 'entertainment-workspace': entertainment }">
     <nav class="rail" aria-label="主导航">
       <a class="rail-logo" href="/" title="LinChat"><img src="/favicon.svg" alt="LinChat" /></a>
-      <button class="rail-button active" title="消息" aria-label="消息" @click="showMobileChat = false"><Icon name="chat" /><span v-if="totalUnread" class="rail-unread"></span></button>
+       <button class="rail-button" :class="{ active: !entertainment }" title="消息" aria-label="消息" @click="entertainment = false; showMobileChat = false"><Icon name="chat" /><span v-if="totalUnread" class="rail-unread"></span></button>
+       <button class="rail-button" :class="{ active: entertainment }" title="娱乐模式" aria-label="娱乐模式" @click="entertainment = true"><Icon name="dice" /></button>
       <button class="rail-button" title="通讯录" aria-label="通讯录" @click="openModal('directory')"><Icon name="users" /></button>
       <button v-if="me.admin" class="rail-button" title="邀请成员" aria-label="邀请成员" @click="openModal('invite')"><Icon name="plus" /></button>
       <div class="rail-bottom">
@@ -547,7 +567,11 @@ onBeforeUnmount(() => {
         <button class="avatar me-avatar" :class="hue(me.id)" :title="me.nickname" aria-label="我的账号" @click="openModal('settings')">{{ avatar(me.nickname) }}</button>
       </div>
     </nav>
-    <aside class="conversation-panel">
+     <KeepAlive>
+       <Entertainment v-if="entertainment" :key="me.id" :me="me" :people="people" :api="api" :revision="gameRevision" @notify="notify" @chat="openCampaignChat" />
+     </KeepAlive>
+     <template v-if="!entertainment">
+     <aside class="conversation-panel">
       <header class="list-heading"><div><span class="eyebrow">YOUR SPACE</span><h1>消息<span class="count-pill">{{ conversations.length }}</span></h1></div><button class="icon-button outlined" title="新建群聊" aria-label="新建群聊" @click="openModal('group')"><Icon name="plus" /></button></header>
       <div class="search-box"><Icon name="search" :size="17" /><input v-model="query" aria-label="搜索会话" placeholder="搜索会话…" /><span>⌕</span></div>
       <div class="list-subtitle"><span>全部会话</span><span>{{ onlineCount }} 人在线</span></div>
@@ -613,8 +637,9 @@ onBeforeUnmount(() => {
       </template>
       <div v-else class="empty-space"><Icon name="chat" :size="48" /><h2>你的下一段对话，从这里开始</h2><button class="primary" @click="openModal('directory')">开始聊天</button></div>
       <div v-if="dragging && current" class="drop-overlay"><Icon name="attach" :size="40" /><h3>松开以发送文件</h3><p>最大 {{ bytes(maxUpload) }}</p></div>
-    </section>
-  </main>
+     </section>
+     </template>
+   </main>
 
   <div v-if="modal" class="modal-backdrop" @click.self="modal = ''" @keydown.esc="modal = ''">
     <section class="modal" role="dialog" aria-modal="true" :aria-label="{directory:'通讯录',group:'新建群聊',invite:'邀请成员',settings:'个人设置',connection:'服务端连接',members:'会话成员',addMembers:'添加群成员'}[modal]">
@@ -657,6 +682,6 @@ onBeforeUnmount(() => {
       </template>
     </section>
   </div>
-  <div v-if="toast" class="toast" :class="{ 'mention-toast': toastKind === 'mention' }" role="status"><Icon name="info" :size="17" />{{ toast }}</div>
+  <div v-if="toast" class="toast" :class="{ 'mention-toast': toastKind === 'mention', 'game-toast': entertainment }" role="status"><Icon name="info" :size="17" />{{ toast }}</div>
   </div>
 </template>

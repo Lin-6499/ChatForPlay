@@ -1,6 +1,6 @@
 {
   "name": "linchat-desktop",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "LinChat — 云端与 Radmin 虚拟局域网兼容的多人实时通讯",
   "author": "LinChat",
   "private": true,
@@ -14,7 +14,10 @@
     "package": "npm run build && electron-builder --win nsis portable --x64",
     "package:dir": "npm run build && electron-builder --win --dir",
     "test:desktop": "electron scripts/desktop-smoke.cjs",
-    "test:features": "node --test scripts/mentions.test.cjs scripts/updates.test.cjs",
+    "test:features": "node --test scripts/mentions.test.cjs scripts/updates.test.cjs scripts/campaign.test.cjs",
+    "test:entertainment": "node scripts/entertainment-check.cjs",
+    "campaign:mcp": "node scripts/campaign-mcp.cjs",
+    "campaign:agent": "node scripts/campaign-agent.cjs",
     "release:manifest": "node scripts/release-manifest.cjs",
     "release:publish": "node scripts/publish-release.cjs"
   },

@@ -8,7 +8,22 @@
 - 云端目标：腾讯云 `43.138.138.136`，`chat.linblog.site`
 - Radmin 本机网卡：`26.232.226.141`
 
-## 1.1.0 功能更新
+## 1.2.0 娱乐模式
+
+- 发行入口：[LinChat 1.2.0](https://github.com/Lin-6499/ChatForPlay/releases/tag/v1.2.0)。Windows 安装包 `LinChat-Setup-1.2.0.exe`，107,112,424 字节，SHA-256：`bd5581e213cc76af4ed94c753d946274e94eba632faa0c697e923b99d2a3f547`。
+- 安装版、便携版与 Windows/Linux 服务端已构建，内置服务端与最终测试二进制摘要一致。打包后的 EXE 已连接云端 HTTPS 并验证正式版更新接口。结果：`dist/verification/packaged-check-results.json`。
+- 战役房间、固定规则版本、角色卡与资源、服务器掷骰、公开／私密日志、结束摘要、故事提案和暂停／继续已实现。
+- 支持手动主持、Grok／OpenAI 兼容内置主持、战役令牌与外部自动主持；HTTP 接口、Node.js 22+ 机器人示例和 stdio MCP 接入见 [娱乐模式文档](docs/ENTERTAINMENT.md)。
+- Go 集成测试及 `go vet`、7 项 JS 逻辑测试、13 项娱乐模式端到端场景、11 项原有 Electron 场景通过。内置与外部模型流程使用本机工具调用替身验证。
+- 桌面 1264×811、800×654 与移动 390×780 完成截图复核，768px／320px 完成主操作命中与溢出检查。草稿保留和移动错误重试经修正后的复核结论为 `ship`，范围限于该修复批次。
+- 2026-11-25 云端从 1.1.0 升级至 **1.2.0**；备份目录：`/var/backups/linchat/update-20261125-103617-tY9Itn/`，包含完整数据及旧程序。
+- SQLite 迁移至 `user_version=3`，完整性检查为 `ok`。逐项比较保留原有 3 个用户、4 个会话、9 条成员关系、36 条消息、2 条提及关系；附件记录为 0。结果：`dist/verification/cloud-upgrade-after.json`。
+- 云端 Linux 二进制 SHA-256：`3b19fe5b998c0a701519ef0fce4bbfc55768a4dbb92b1b98d27318c8594851ff`。
+- 6 项公网检查通过，JS/CSS 与已验证构建逐字节一致；战役、主持秘密、模型设置未登录均返回 401。结果：`dist/verification/cloud-check-results.json`。
+- 云端模型尚未配置。管理员需填写自己的 API 地址、有效模型 ID 与密钥；云端和本机主机各自保存配置。数据目录新增 `ai-secret.key`，权限为 `0600`，备份必须包含该文件。
+- 本次临时 SSH 公钥、服务器暂存目录、本地私钥已移除，原有 SSH 授权保留。结果：`dist/verification/cloud-upgrade-cleanup.json`。
+
+## 1.1.0 功能更新（历史记录）
 
 - 已发布：[LinChat 1.1.0](https://github.com/Lin-6499/ChatForPlay/releases/tag/v1.1.0)，发行源码提交 `6569168`。
 - Windows 安装包：`LinChat-Setup-1.1.0.exe`，106,898,765 字节；SHA-256：`759c7717077de5e39b1cbf323bf92a71776c7f28a56e91dd261bb2753ef08ff3`。
@@ -42,12 +57,12 @@ sudo bash update-cloud.sh ./linchat-linux-amd64 <SHA256SUMS.txt 中的 Linux 二
 - 监听：`127.0.0.1:8787`
 - systemd：`/etc/systemd/system/linchat.service`
 - Nginx：`/etc/nginx/sites-available/linchat`，链接到 `sites-enabled/linchat`
-- 本机及公网健康接口已返回 `{"ok":true,"version":"1.1.0"}`。
+- 本机及公网健康接口已返回 `{"ok":true,"version":"1.2.0"}`。
 - DNS：`chat.linblog.site A 43.138.138.136`。
 - HTTPS：Let's Encrypt 证书，有效期至 2027-02-22。
 - 自动续期：现有 `certbot.timer`，增加仅针对 chat 域名的续期后 Nginx reload hook。
 - 初始化：管理员已创建；新成员通过管理员生成的邀请链接注册，已有账号直接登录。
-- Linux 二进制 SHA-256：`4c643808b0aca6f9630b7b6e719b030b878f3077a3681ae76e4d392534bb2de3`。
+- Linux 二进制 SHA-256：`3b19fe5b998c0a701519ef0fce4bbfc55768a4dbb92b1b98d27318c8594851ff`。
 
 ## 验证状态
 
@@ -57,7 +72,7 @@ sudo bash update-cloud.sh ./linchat-linux-amd64 <SHA256SUMS.txt 中的 Linux 二
 - Electron 11 项冒烟验证已通过，包括三账号聊天、附件、建群、多人提及与提醒、更新提示下发送、IPC 权限边界和 Radmin 实际网卡切换。
 - 本机存在 HTTP 系统代理。桌面程序针对 Radmin / 私网地址使用直连；云端优先采用系统代理，遇到代理或传输故障时尝试直连，始终验证 TLS 证书。
 - Electron 安装包输出：`dist/desktop/<版本>/`；1.0.1 起采用当前用户一键安装、安装后自动启动，并提供源码目录下的自动下载安装入口。
-- 公网 5 项检查通过：HTTPS 健康接口、Vue 静态资源与响应头、未登录隔离、跨来源写入拒绝、初始化令牌保护。结果：`dist/verification/cloud-check-results.json`。
+- 公网 6 项检查通过：HTTPS 健康接口、Vue 静态资源与响应头、未登录隔离、跨来源写入拒绝、战役／秘密／模型配置鉴权、初始化令牌保护。结果：`dist/verification/cloud-check-results.json`。
 - 实际打包的 Windows EXE 已启动并成功连接云端 HTTPS 引导页，版本号和数据目录正确。结果：`dist/verification/packaged-check-results.json`。
 - 桌面版 1.1.0 已完成当前用户静默升级，安装后 EXE、应用包和内置服务端与构建产物一致；桌面及开始菜单快捷方式均指向已安装程序。结果：`dist/verification/installer-results.json`。
 - 已安装的 1.1.0 程序已连接云端 HTTPS 并显示登录页，使用独立验证配置目录，并验证真实 GitHub 更新检查。结果：`dist/verification/installed-check-results.json`。

@@ -338,7 +338,7 @@ func (a *app) updateProfile(w http.ResponseWriter, r *http.Request, u user) {
 }
 
 func (a *app) users(w http.ResponseWriter, r *http.Request, u user) {
-	rows, err := a.store.Query("SELECT id,username,nickname,admin FROM users ORDER BY nickname")
+	rows, err := a.store.Query("SELECT id,username,nickname,admin FROM users WHERE id NOT IN (SELECT user_id FROM service_accounts) ORDER BY nickname")
 	if err != nil {
 		fail(w, 500, "读取成员失败")
 		return
