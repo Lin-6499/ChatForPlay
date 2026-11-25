@@ -20,7 +20,11 @@
 - 桌面版增加 GitHub 正式版本检查：启动后自动检查、每 6 小时检查，以及连接中心、托盘和个人设置的手动入口。
 - Go 集成测试和静态检查通过；6 项提及/更新逻辑测试通过；11 项 Electron 场景通过，含真实多人提及、未读标记、后台通知、窄屏及更新提醒。
 - 更新提示在页面顶部独立占位；1264×811 和 390×780 下，提示打开时均通过真实鼠标事件发送验证。复核确认发送按钮遮挡问题已解决。
-- 云端目前仍为 1.0.0。此次尝试 SSH 登录被拒绝，腾讯云控制台需要重新登录；1.1.0 云端升级等待可用的服务器授权。
+- 2026-11-25 已通过 SSH 将云端从 1.0.0 升级到 1.1.0。用户在本机 SSH 窗口完成密码登录后，使用仅限本次升级的临时密钥执行备份、部署和验证。
+- 完整数据及旧程序备份：`/var/backups/linchat/update-20261125-093806-5yxvs1/`。
+- 迁移后 SQLite `user_version=2`、完整性检查为 `ok`；备份与在线数据库逐项比较，原有 3 个用户、4 个会话、9 条成员关系、33 条消息均保留，附件记录仍为 0。结果：`dist/verification/cloud-upgrade-after.json`。
+- 公网 HTTPS 健康接口已确认 1.1.0，5 项公网检查通过；线上 JS/CSS 与已验证的 1.1.0 构建产物逐字节一致。结果：`dist/verification/cloud-assets-1.1.0.json`。
+- 已移除本次临时 SSH 公钥、服务器暂存文件、本地私钥及诊断日志，其余 SSH 授权保留。结果：`dist/verification/cloud-upgrade-cleanup.json`。
 - 云端升级脚本：`deploy/update-cloud.sh`。验证新二进制 SHA-256 后停止服务、备份完整数据目录及旧程序，再更新并检查指定版本健康状态。失败恢复旧程序，不回滚已接受的新消息。
 
 ```bash
@@ -38,25 +42,25 @@ sudo bash update-cloud.sh ./linchat-linux-amd64 <SHA256SUMS.txt 中的 Linux 二
 - 监听：`127.0.0.1:8787`
 - systemd：`/etc/systemd/system/linchat.service`
 - Nginx：`/etc/nginx/sites-available/linchat`，链接到 `sites-enabled/linchat`
-- 本机健康接口已返回 `{"ok":true,"version":"1.0.0"}`。
+- 本机及公网健康接口已返回 `{"ok":true,"version":"1.1.0"}`。
 - DNS：`chat.linblog.site A 43.138.138.136`。
 - HTTPS：Let's Encrypt 证书，有效期至 2027-02-22。
 - 自动续期：现有 `certbot.timer`，增加仅针对 chat 域名的续期后 Nginx reload hook。
 - 初始化：管理员已创建；新成员通过管理员生成的邀请链接注册，已有账号直接登录。
-- Linux 二进制 SHA-256：`ed9f92f339bb308996cf1ea7253bab252fe9a5a828324752ab82a152135cbf92`。
+- Linux 二进制 SHA-256：`4c643808b0aca6f9630b7b6e719b030b878f3077a3681ae76e4d392534bb2de3`。
 
 ## 验证状态
 
 - Go 集成测试覆盖：私聊隔离、WebSocket 实时消息、编号去重、邀请次数、跨来源请求拒绝、改密会话撤销、文件权限和大小限制、历史分页与数据库重启持久化。
 - 前端 TypeScript 检查及 Vite 构建已通过。
 - Go 静态检查已通过。
-- Electron 7 项冒烟验证已通过，包括三账号聊天、附件、建群、IPC 权限边界和 Radmin 实际网卡切换。
+- Electron 11 项冒烟验证已通过，包括三账号聊天、附件、建群、多人提及与提醒、更新提示下发送、IPC 权限边界和 Radmin 实际网卡切换。
 - 本机存在 HTTP 系统代理。桌面程序针对 Radmin / 私网地址使用直连；云端优先采用系统代理，遇到代理或传输故障时尝试直连，始终验证 TLS 证书。
 - Electron 安装包输出：`dist/desktop/<版本>/`；1.0.1 起采用当前用户一键安装、安装后自动启动，并提供源码目录下的自动下载安装入口。
 - 公网 5 项检查通过：HTTPS 健康接口、Vue 静态资源与响应头、未登录隔离、跨来源写入拒绝、初始化令牌保护。结果：`dist/verification/cloud-check-results.json`。
 - 实际打包的 Windows EXE 已启动并成功连接云端 HTTPS 引导页，版本号和数据目录正确。结果：`dist/verification/packaged-check-results.json`。
-- 桌面版 1.0.1 已完成当前用户静默安装，安装后 EXE 与构建产物 SHA-256 一致；桌面及开始菜单快捷方式均指向已安装程序。结果：`dist/verification/installer-results.json`。
-- 已安装的 1.0.1 程序已连接云端 HTTPS 并显示登录页，使用独立验证配置目录。结果：`dist/verification/installed-check-results.json`。
+- 桌面版 1.1.0 已完成当前用户静默升级，安装后 EXE、应用包和内置服务端与构建产物一致；桌面及开始菜单快捷方式均指向已安装程序。结果：`dist/verification/installer-results.json`。
+- 已安装的 1.1.0 程序已连接云端 HTTPS 并显示登录页，使用独立验证配置目录，并验证真实 GitHub 更新检查。结果：`dist/verification/installed-check-results.json`。
 - 原站点回归：`https://ht.linblog.site/` 返回 200；`https://files.linblog.site/` 根路径部署前后均返回 404。
 - 交付后已从 `ubuntu` 的 `authorized_keys` 移除本次 `linchat-deploy-session` 临时公钥；其余 SSH 授权保留。
 
