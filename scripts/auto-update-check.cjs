@@ -1,7 +1,7 @@
 // Real, isolated NSIS update: custom Unicode directory, verified download, silent
 // install/relaunch and persistent host/login/data. Never uses production appId.
 const { build, Platform, Arch } = require('electron-builder')
-const { _electron: electron, chromium } = require('playwright-core')
+const { _electron: electron } = require('playwright-core')
 const { spawn } = require('node:child_process')
 const fs = require('node:fs')
 const path = require('node:path')
@@ -13,7 +13,7 @@ const out = path.join(root, 'dist', 'verification')
 const directory = path.join(out, 'auto-update')
 const installDir = path.join(directory, '自选目录 with spaces', 'LinChat')
 const results = []
-let application, browser, server, settings, badDownload = true
+let application, server, settings, badDownload = true
 function record(test) { results.push({ test, passed: true }); console.log('PASS', test) }
 async function waitFor(fn, label, timeout = 90000) {
   const deadline = Date.now() + timeout
@@ -38,6 +38,20 @@ async function freePort() {
   await new Promise(resolve => s.close(resolve))
   return port
 }
+function buildFingerprint() {
+  const hash = crypto.createHash('sha256')
+  const files = ['package.json', 'package-lock.json', 'scripts/auto-update-fixture.cjs', 'dist/server/linchat-windows-amd64.exe']
+  function visit(directory) {
+    for (const item of fs.readdirSync(path.join(root, directory), { withFileTypes: true })) {
+      const file = directory + '/' + item.name
+      if (item.isDirectory()) visit(file)
+      else files.push(file)
+    }
+  }
+  visit('desktop')
+  for (const file of files.sort()) hash.update(file).update(fs.readFileSync(path.join(root, file)))
+  return hash.digest('hex')
+}
 async function request(base, route, body, cookie) {
   const response = await fetch(base + '/api' + route, {
     method: body ? 'POST' : 'GET', headers: { 'Content-Type': 'application/json', Origin: base, 'X-LinChat': '1', ...(cookie ? { Cookie: cookie } : {}) },
@@ -50,17 +64,21 @@ async function request(base, route, body, cookie) {
 ;(async () => {
   fs.mkdirSync(directory, { recursive: true })
   const pkg = require('../package.json')
+  const fingerprint = buildFingerprint()
   for (const version of ['1.2.1', pkg.version]) {
+    const marker = path.join(directory, version, 'build-input.sha256')
+    if (fs.existsSync(marker) && fs.readFileSync(marker, 'utf8') === fingerprint) continue
     await build({ targets: Platform.WINDOWS.createTarget(['nsis'], Arch.x64), publish: 'never',
-      config: { ...pkg.build, appId: 'site.linblog.linchat.update-test', productName: 'LinChatUpdateTest',
+      config: { appId: 'site.linblog.linchat.update-test', productName: 'LinChatUpdateTest',
         executableName: 'LinChatUpdateTest', compression: 'store',
         extraMetadata: { name: 'linchat-update-test', version, main: 'scripts/auto-update-fixture.cjs',
           linchatUpdateTestConfig: path.join(directory, 'settings.json') },
-        files: [...pkg.build.files, 'scripts/auto-update-fixture.cjs'],
-        directories: { ...pkg.build.directories, output: path.join(directory, version) },
-        nsis: { ...pkg.build.nsis, createDesktopShortcut: false, createStartMenuShortcut: false, shortcutName: 'LinChatUpdateTest' },
+        files: ['scripts/auto-update-fixture.cjs'],
+        directories: { output: path.join(directory, version) },
+        nsis: { createDesktopShortcut: false, createStartMenuShortcut: false, shortcutName: 'LinChatUpdateTest' },
       },
     })
+    fs.writeFileSync(marker, fingerprint)
   }
   const target = path.join(directory, pkg.version)
   const installer = path.join(target, `LinChat-Setup-${pkg.version}.exe`)
@@ -77,25 +95,30 @@ async function request(base, route, body, cookie) {
   })
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
   settings = { feed: `http://127.0.0.1:${server.address().port}/`, userData: fs.mkdtempSync(path.join(directory, 'profile-')),
-    debugPort: await freePort(), controlPort: await freePort(), report: path.join(directory, 'running.json') }
+    controlPort: await freePort(), report: path.join(directory, 'running.json') }
   const config = path.join(directory, 'settings.json')
   fs.writeFileSync(config, JSON.stringify(settings))
+  fs.rmSync(path.join(process.env.LOCALAPPDATA, 'linchat-update-test-updater'), { recursive: true, force: true })
   await run(path.join(directory, '1.2.1', 'LinChat-Setup-1.2.1.exe'), ['/S', `/D=${installDir}`])
   const executablePath = path.join(installDir, 'LinChatUpdateTest.exe')
   assert.ok(fs.existsSync(path.join(installDir, 'Uninstall LinChatUpdateTest.exe')))
   application = await electron.launch({ executablePath, env: { ...process.env, LINCHAT_UPDATE_TEST_CONFIG: config }, timeout: 30000 })
   const page = await application.firstWindow()
-  await page.locator('#adapter').filter({ hasNotText: '正在检查' }).waitFor()
+  await page.locator('#adapter').filter({ hasNotText: '正在检查' }).waitFor({ state: 'attached' })
   assert.equal((await page.evaluate(() => window.linchatDesktop.getUpdateState())).autoUpdate, true)
   record('Installed fixture recognizes custom Unicode/space directory as auto-update capable')
   const host = await page.evaluate(() => window.linchatDesktop.startHost('local'))
   const token = new URL(host.setupURL).hash.replace('#setup=', '')
   const account = await request(host.url, '/setup', { token, username: 'updateowner', nickname: '升级验证', password: 'test-update-password-123' })
-  await page.context().addCookies([{ name: 'linchat_session', value: account.cookie.split('=')[1], url: host.url }])
   await request(host.url, '/conversations/1/messages', { client_id: crypto.randomUUID(), content: '静默升级之前的聊天记录' }, account.cookie)
-  await page.evaluate(url => window.linchatDesktop.connect(url, '升级保留连接'), host.url)
+  await page.evaluate(url => { void window.linchatDesktop.connect(url, '升级保留连接') }, host.url)
+  await page.locator('input[autocomplete="username"]').fill('updateowner')
+  await page.locator('input[type="password"]').fill('test-update-password-123')
+  await page.locator('.auth-form-wrap form').evaluate(form => form.requestSubmit())
   await page.locator('.workspace').waitFor()
   await page.evaluate(() => localStorage.setItem('update-preservation', 'retained'))
+  const appearance = await page.evaluate(value => window.linchatDesktop.setAppearance(value),
+    { accent: '#95afd0', background: '#10131a', panel: '#171c26' })
   const before = await request(host.url, '/conversations/1/messages', null, account.cookie)
   const campaign = await request(host.url, '/v1/campaigns', {
     title: '自动更新数据保留验证', ruleset: '5e-2024', members: [], scene: '更新前已保存的战役场景', house_rules: '升级验证',
@@ -125,25 +148,27 @@ async function request(base, route, body, cookie) {
   assert.equal(running.exe.toLowerCase(), executablePath.toLowerCase())
   assert.equal(running.userData, settings.userData)
   record('NSIS silently upgrades and automatically relaunches in the same custom directory')
-  browser = await chromium.connectOverCDP(`http://127.0.0.1:${settings.debugPort}`)
-  const restored = browser.contexts()[0].pages()[0]
-  await restored.locator('.workspace').waitFor({ timeout: 30000 })
-  assert.equal(await restored.evaluate(() => localStorage.getItem('update-preservation')), 'retained')
+  const control = `http://127.0.0.1:${settings.controlPort}`
+  const restored = await waitFor(async () => {
+    const state = await (await fetch(control + '/inspect')).json()
+    return state.workspace ? state : null
+  }, 'restored authenticated chat')
+  assert.equal(restored.marker, 'retained')
+  assert.deepEqual(restored.appearance, appearance)
   const after = await request(host.url, '/conversations/1/messages', null, account.cookie)
   assert.deepEqual(after.data.messages, before.data.messages)
   const campaignsAfter = await request(host.url, '/v1/campaigns', null, account.cookie)
   assert.deepEqual(campaignsAfter.data, campaignsBefore.data)
   assert.ok(campaign.data.id)
-  assert.equal((await restored.evaluate(() => window.linchatDesktop.getUpdateState())).currentVersion, pkg.version)
-  await restored.screenshot({ path: path.join(out, 'auto-update-restored-chat.png') })
+  assert.equal(restored.update.currentVersion, pkg.version)
+  fs.writeFileSync(path.join(out, 'auto-update-restored-chat.png'), Buffer.from(await (await fetch(control + '/screenshot')).arrayBuffer()))
   record('Managed host restarts with identical saved messages, campaigns, login session and browser storage')
-  await restored.evaluate(() => window.linchatDesktop.openConnections())
-  const state = await restored.evaluate(() => window.linchatDesktop.getState())
+  await fetch(control + '/connections', { method: 'POST' })
+  const state = await waitFor(async () => (await (await fetch(control + '/inspect')).json()).launcherState, 'restored launcher')
   assert.ok(state.profiles.some(p => p.url === host.url))
-  await restored.evaluate(() => window.linchatDesktop.stopHost())
+  assert.ok((await fetch(control + '/stop-host', { method: 'POST' })).ok)
   await fetch(`http://127.0.0.1:${settings.controlPort}/quit`, { method: 'POST' })
   await waitFor(() => { try { process.kill(running.pid, 0); return false } catch { return true } }, 'fixture exit')
-  browser = null
   const hash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex')
   assert.equal(hash(path.join(installDir, 'resources', 'app.asar')), hash(path.join(target, 'win-unpacked', 'resources', 'app.asar')))
   record('Installed app.asar exactly matches the verified target build')
@@ -151,11 +176,18 @@ async function request(base, route, body, cookie) {
   fs.writeFileSync(path.join(out, 'auto-update-results.json'), JSON.stringify({ passed: true, version: pkg.version, results, installDir }, null, 2))
 })().catch(async error => {
   console.error(error)
+  if (application) {
+    const page = await application.firstWindow().catch(() => null)
+    if (page) {
+      await page.screenshot({ path: path.join(out, 'auto-update-failure.png') }).catch(() => {})
+      console.error(await page.locator('body').innerText().catch(() => 'Page closed'))
+    }
+  }
+  if (settings) console.error('Restart diagnostics:', await fetch(`http://127.0.0.1:${settings.controlPort}/inspect`).then(r => r.text()).catch(() => 'Not running'))
   fs.writeFileSync(path.join(out, 'auto-update-results.json'), JSON.stringify({ passed: false, results, error: error.stack }, null, 2))
   process.exitCode = 1
 }).finally(async () => {
   if (settings) await fetch(`http://127.0.0.1:${settings.controlPort}/quit`, { method: 'POST' }).catch(() => {})
   if (application) await application.close().catch(() => {})
-  if (browser) await browser.close().catch(() => {})
   if (server) server.close()
 })
