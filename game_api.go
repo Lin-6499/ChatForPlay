@@ -287,6 +287,12 @@ func (a *app) registerGames(m *http.ServeMux) {
 		"GET /api/v1/campaigns/{id}/memory-suggestions":                      a.gameMemorySuggestions,
 		"POST /api/v1/campaigns/{id}/memory-suggestions/{suggestion}/reject": a.gameRejectMemory,
 		"GET /api/v1/campaigns/{id}/recap":                                   a.gameRecap,
+		"GET /api/v1/campaigns/{id}/capabilities":                            a.gameCapabilities,
+		"GET /api/v1/campaigns/{id}/host-diagnostics":                        a.gameHostDiagnostics,
+		"GET /api/v1/campaigns/{id}/flow":                                    a.gameFlowRead,
+		"PUT /api/v1/campaigns/{id}/flow":                                    a.gameFlowSave,
+		"POST /api/v1/campaigns/{id}/flow/release":                           a.gameFlowRelease,
+		"POST /api/v1/campaigns/{id}/actions/{event}/supplement":             a.gameSupplement,
 		"GET /api/v1/campaigns/{id}/lore/{entry}/history":                    a.gameLoreHistory,
 		"GET /api/v1/campaigns/{id}/stream":                                  a.gameStreamRead,
 		"POST /api/v1/campaigns/{id}/turns/{turn}/fail":                      a.gameFailHTTP,
@@ -425,6 +431,15 @@ func (a *app) gamePatchState(r *http.Request, g gameActor) (any, error) {
 		}
 		if c.ActiveTurn != 0 && !pause {
 			return nil, gameFail(409, "请等待主持完成或先暂停")
+		}
+		if in.Mode != nil && *in.Mode == "manual" || in.AutoRespond != nil && !*in.AutoRespond {
+			flow, err := readCampaignFlow(tx.QueryRow("SELECT mode,participants,round FROM campaign_flow WHERE campaign_id=?", c.ID))
+			if err != nil {
+				return nil, err
+			}
+			if flow.Mode == "collect" {
+				return nil, gameFail(409, "请先处理已收集行动并切回逐人处理，再关闭自动主持")
+			}
 		}
 		if in.Scene != nil {
 			if !textOK(*in.Scene, 0, 8000) {

@@ -65,6 +65,19 @@ func migrateGames(db *sql.DB) error {
 	  error TEXT NOT NULL DEFAULT '', result TEXT NOT NULL DEFAULT '{}'
 	);
 	CREATE INDEX IF NOT EXISTS campaign_turns_queue ON campaign_turns(campaign_id,status,id);
+	CREATE TABLE IF NOT EXISTS campaign_flow (
+	  campaign_id INTEGER PRIMARY KEY REFERENCES campaigns(id), mode TEXT NOT NULL,
+	  participants TEXT NOT NULL, round INTEGER NOT NULL DEFAULT 1
+	);
+	CREATE TABLE IF NOT EXISTS campaign_collected_actions (
+	  campaign_id INTEGER NOT NULL, round INTEGER NOT NULL, user_id INTEGER NOT NULL,
+	  event_id INTEGER NOT NULL UNIQUE, turn_id INTEGER NOT NULL DEFAULT 0,
+	  PRIMARY KEY(campaign_id,round,user_id)
+	);
+	CREATE TABLE IF NOT EXISTS campaign_action_supplements (
+	  event_id INTEGER PRIMARY KEY REFERENCES campaign_events(id),
+	  base_event_id INTEGER NOT NULL REFERENCES campaign_events(id)
+	);
 	CREATE TABLE IF NOT EXISTS campaign_drafts (
 	  campaign_id INTEGER PRIMARY KEY REFERENCES campaigns(id),
 	  turn_id INTEGER NOT NULL, lease TEXT NOT NULL, seq INTEGER NOT NULL,
@@ -103,6 +116,12 @@ func migrateGames(db *sql.DB) error {
 	  event_id INTEGER NOT NULL REFERENCES campaign_events(id),
 	  PRIMARY KEY(campaign_id,prompt_event_id,user_id)
 	);
-	PRAGMA user_version=7;`)
+	CREATE TABLE IF NOT EXISTS campaign_host_activity (
+	  campaign_id INTEGER PRIMARY KEY REFERENCES campaigns(id),
+	  contact_at INTEGER NOT NULL DEFAULT 0, claim_at INTEGER NOT NULL DEFAULT 0,
+	  stream_at INTEGER NOT NULL DEFAULT 0, complete_at INTEGER NOT NULL DEFAULT 0,
+	  fail_at INTEGER NOT NULL DEFAULT 0
+	);
+	PRAGMA user_version=8;`)
 	return err
 }

@@ -216,7 +216,13 @@ func (a *app) gameEvents(c campaign, g gameActor, before int64, publicOnly bool)
 		FROM campaign_events e JOIN users u ON u.id=e.actor_id WHERE e.campaign_id=? AND (?=0 OR e.id<?)
 		AND (e.visibility='public' OR ? OR (e.visibility='private' AND (e.recipient_id=? OR e.actor_id=?)))
 		AND (?=0 OR NOT EXISTS(SELECT 1 FROM campaign_turns t WHERE t.event_id=e.id AND t.id>?))
+		AND (?=0 OR NOT EXISTS(SELECT 1 FROM campaign_collected_actions a WHERE a.campaign_id=e.campaign_id
+		  AND (a.event_id=e.id OR a.event_id IN(SELECT base_event_id FROM campaign_action_supplements WHERE event_id=e.id))
+		  AND (a.turn_id=0 OR a.turn_id>?)))
+		AND (?=0 OR NOT EXISTS(SELECT 1 FROM campaign_turns t JOIN campaign_action_supplements s ON s.base_event_id=t.event_id WHERE s.event_id=e.id AND t.id>?))
 		ORDER BY e.id DESC LIMIT 80`, c.ID, before, before, g.secrets(c), privateUser, privateUser,
+		publicContextTurn(c, publicOnly), publicContextTurn(c, publicOnly),
+		publicContextTurn(c, publicOnly), publicContextTurn(c, publicOnly),
 		publicContextTurn(c, publicOnly), publicContextTurn(c, publicOnly))
 	if err != nil {
 		return nil, err
@@ -269,7 +275,18 @@ func (a *app) gamePublicContext(c campaign) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"state": c, "characters": chars, "events": events, "checks": checks, "check_rule": checkRule, "lore": lore, "secret_policy": "这里只含公开资料；秘密通过单独授权接口访问，待公开的线索由房主批准为场景。"}, nil
+	actions := []flowAction{}
+	if c.ActiveTurn != 0 {
+		var event int64
+		if err := a.store.QueryRow("SELECT event_id FROM campaign_turns WHERE id=? AND campaign_id=?", c.ActiveTurn, c.ID).Scan(&event); err != nil {
+			return nil, err
+		}
+		actions, err = a.turnActionDetails(c.ID, c.ActiveTurn, event)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return map[string]any{"state": c, "characters": chars, "events": events, "checks": checks, "check_rule": checkRule, "lore": lore, "turn_actions": actions, "secret_policy": "这里只含公开资料；秘密通过单独授权接口访问，待公开的线索由房主批准为场景。"}, nil
 }
 func (a *app) gameContextHTTP(r *http.Request, g gameActor) (any, error) {
 	c, err := a.gameAccess(pathID(r, "id"), g)
@@ -335,7 +352,7 @@ func (a *app) gameAction(r *http.Request, g gameActor) (any, error) {
 		}
 		var turn int64
 		if c.AutoRespond && c.Mode != "manual" {
-			turn, err = queueGameTurn(tx, c, id, "action")
+			turn, _, err = collectCampaignAction(tx, c, g.ID, id)
 		}
 		return map[string]any{"event_id": id, "turn_id": turn}, err
 	})
@@ -391,7 +408,13 @@ func (a *app) gameRollValue(cid int64, g gameActor, in gameRollInput) (any, erro
 		}
 		var turn int64
 		if in.TurnID == 0 && in.Visibility == "public" && c.AutoRespond && c.Mode != "manual" {
-			turn, err = queueGameTurn(tx, c, id, "action")
+			flow, e := readCampaignFlow(tx.QueryRow("SELECT mode,participants,round FROM campaign_flow WHERE campaign_id=?", c.ID))
+			if e != nil {
+				return nil, e
+			}
+			if flow.Mode != "collect" {
+				turn, err = queueGameTurn(tx, c, id, "action")
+			}
 		}
 		return map[string]any{"event_id": id, "turn_id": turn, "roll": roll}, err
 	})

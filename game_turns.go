@@ -63,6 +63,9 @@ func (a *app) claimGame(cid int64, g gameActor) (*gameTurn, error) {
 	if (g.actorKey == "builtin" && c.Mode != "builtin") || (g.actorKey != "builtin" && (g.AgentID == 0 || c.Mode != "external")) {
 		return nil, gameFail(403, "主持模式与接入方式不匹配")
 	}
+	if err := touchGameHost(a.store.DB, cid, "contact_at"); err != nil {
+		return nil, err
+	}
 	tx, err := a.store.Begin()
 	if err != nil {
 		return nil, err
@@ -126,6 +129,9 @@ func (a *app) claimGame(cid int64, g gameActor) (*gameTurn, error) {
 		return nil, err
 	}
 	if _, err = tx.Exec("UPDATE campaigns SET phase='narrating',active_turn=? WHERE id=?", t.ID, cid); err != nil {
+		return nil, err
+	}
+	if err = touchGameHost(tx, cid, "claim_at"); err != nil {
 		return nil, err
 	}
 	if err = tx.Commit(); err != nil {
@@ -287,6 +293,9 @@ func (a *app) completeGame(cid, turnID int64, g gameActor, in gameCompleteInput)
 		if err = saveMemorySuggestions(tx, c, turnID, id, o.MemorySuggestions); err != nil {
 			return nil, err
 		}
+		if err = touchGameHost(tx, cid, "complete_at"); err != nil {
+			return nil, err
+		}
 		_, err = tx.Exec("UPDATE campaigns SET scene=?,summary=?,phase=?,active_turn=0,version=version+1,updated_at=? WHERE id=?", c.Scene, c.Summary, o.Phase, time.Now().UnixMilli(), cid)
 		if err != nil {
 			return nil, err
@@ -306,17 +315,27 @@ func (a *app) gameCompleteHTTP(r *http.Request, g gameActor) (any, error) {
 func (a *app) gameFailHTTP(r *http.Request, g gameActor) (any, error) {
 	var in struct {
 		gameOp
-		Lease string `json:"lease"`
+		Lease  string `json:"lease"`
+		Reason string `json:"reason"`
 	}
 	if err := gameBody(r, &in); err != nil {
 		return nil, err
 	}
 	id := pathID(r, "turn")
+	reasons := map[string]string{"": "外部主持未完成", "unknown": "外部主持未完成", "connection": "主持连接或请求超时", "model_response": "模型输出或工具调用格式不兼容", "tool_error": "主持接口调用被拒绝，请检查规则、版本与租约", "cancelled": "主持任务已取消"}
+	message, valid := reasons[in.Reason]
+	if !valid {
+		return nil, gameFail(400, "主持失败原因编号无效")
+	}
+	message += "，请房主检查后重试；已掷骰结果保留"
 	return a.gameMutation(pathID(r, "id"), g, in.gameOp, fmt.Sprintf("fail:%d", id), in, func(tx *sql.Tx, c campaign) (any, error) {
 		if err := checkGameLease(tx, c, g, id, in.Lease); err != nil {
 			return nil, err
 		}
-		if _, err := tx.Exec("UPDATE campaign_turns SET status='failed',lease='',error='外部主持未完成，请房主检查后重试；掷骰结果已保留' WHERE id=?", id); err != nil {
+		if _, err := tx.Exec("UPDATE campaign_turns SET status='failed',lease='',error=? WHERE id=?", message, id); err != nil {
+			return nil, err
+		}
+		if err := touchGameHost(tx, c.ID, "fail_at"); err != nil {
 			return nil, err
 		}
 		_, err := tx.Exec("UPDATE campaigns SET active_turn=0,phase='awaiting_action' WHERE id=?", c.ID)
@@ -335,6 +354,9 @@ func (a *app) failGameTurn(cid int64, t gameTurn, message string) {
 	}
 	n, _ := res.RowsAffected()
 	if n == 0 {
+		return
+	}
+	if touchGameHost(tx, cid, "fail_at") != nil {
 		return
 	}
 	if _, err = tx.Exec("UPDATE campaigns SET active_turn=0,phase=CASE WHEN phase='paused' THEN phase ELSE 'awaiting_action' END WHERE id=? AND active_turn=?", cid, t.ID); err != nil {
@@ -410,6 +432,13 @@ func (a *app) gameHost(r *http.Request, g gameActor) (any, error) {
 		if in.Kind != "continue" && in.Kind != "summary" {
 			return nil, gameFail(400, "主持请求类型无效")
 		}
+		var collecting int
+		if err := tx.QueryRow("SELECT count(*) FROM campaign_collected_actions WHERE campaign_id=? AND turn_id=0", c.ID).Scan(&collecting); err != nil {
+			return nil, err
+		}
+		if collecting > 0 {
+			return nil, gameFail(409, "仍在收集玩家行动，请先在行动队列中结束本轮收集")
+		}
 		content := "请根据当前公开场景与玩家已提交的行动继续主持。"
 		kind := "action"
 		if in.Kind == "summary" {
@@ -455,7 +484,7 @@ func (a *app) gameMention(tx *sql.Tx, m message) (int64, error) {
 		return 0, err
 	}
 	if c.AutoRespond && c.Mode != "manual" {
-		_, err = queueGameTurn(tx, c, id, "action")
+		_, _, err = collectCampaignAction(tx, c, m.SenderID, id)
 	}
 	return c.ID, err
 }

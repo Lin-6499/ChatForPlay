@@ -67,6 +67,9 @@ func (a *app) streamGame(cid, tid int64, g gameActor, in gameStreamInput) (any, 
 	if err != nil {
 		return nil, err
 	}
+	if err = touchGameHost(tx, cid, "stream_at"); err != nil {
+		return nil, err
+	}
 	if err = tx.Commit(); err != nil {
 		return nil, err
 	}

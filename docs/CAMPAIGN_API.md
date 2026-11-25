@@ -507,3 +507,9 @@ JSON 请求体上限 64 KiB，未知字段会被拒绝；下文标为可省略�
 资料新增chapter_id/progress，支持 `/lore/focus`、`/memory-suggestions`、`/recap`。
 完成回合可选提交 `outcome.memory_suggestions`，只有房主核对采用后才能成为长期事实。
 完整说明见 [MEMORY_PROGRESS.md](MEMORY_PROGRESS.md)。
+
+## 行动节奏与主持接入（1.2.12）
+
+全员收集、联合回合的 `context.turn_actions`、行动补充与失败原因见 [ACTION_FLOW.md](ACTION_FLOW.md)。
+能力发现 `/capabilities`、房主诊断 `/host-diagnostics` 及统一接入阅读顺序见 [HOST_INTEGRATION.md](HOST_INTEGRATION.md)。
+联合回合检定必须使用各玩家各自的event_id，不把所有检定归到turn.event_id。
