@@ -1,5 +1,5 @@
 .workspace.entertainment-workspace { grid-template-columns: 72px minmax(0, 1fr); }
-.app-shell > .toast.game-toast { position: static; order: -1; flex-shrink: 0; transform: none; width: 100%; max-width: none; border-radius: 0; box-shadow: none; background: var(--selected); color: var(--selected-text); border: 0; border-bottom: 1px solid var(--selected-line); padding: 10px 18px; font-size: 12px; }
+.app-shell > .toast.game-toast { position: static; z-index: auto; order: -1; flex-shrink: 0; transform: none; width: 100%; max-width: none; border-radius: 0; box-shadow: none; background: var(--selected); color: var(--selected-text); border: 0; border-bottom: 1px solid var(--selected-line); padding: 10px 18px; font-size: 12px; }
 .game-room-header .game-back { display: none; }
 .game-index-error { margin: 8px 6px 16px; padding: 16px; border: 1px solid var(--danger-line); border-radius: 8px; background: var(--danger-bg); color: var(--danger); font-size: 13px; line-height: 1.7; }
 .game-index-error p { margin: 7px 0 12px; overflow-wrap: anywhere; }

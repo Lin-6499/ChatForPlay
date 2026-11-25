@@ -382,7 +382,10 @@ function connect() {
           if (p) p.last_read = Math.max(p.last_read || 0, event.last_read)
         }
         if (event.user_id === me.value?.id) scheduleRefresh()
+      } else if (event.type === 'campaign.stream') {
+        window.dispatchEvent(new CustomEvent('linchat:campaign-stream', { detail: event.campaign_id }))
       } else if (event.type === 'campaign.changed') {
+        window.dispatchEvent(new CustomEvent('linchat:campaign-stream', { detail: event.campaign_id }))
         gameRevision.value++; scheduleRefresh()
         if (event.conversation_id === currentID.value) await syncActive()
       } else if (event.type === 'users.changed' || event.type === 'conversations.changed') {

@@ -1,6 +1,7 @@
 // Example external host for Grok / OpenAI-compatible function-calling APIs.
 // Usage: configure the five environment variables documented in docs/ENTERTAINMENT.md.
 const { campaignClient } = require('./campaign-client.cjs')
+const { modelStream } = require('./model-stream.cjs')
 const { setTimeout: delay } = require('node:timers/promises')
 const { tools, checkProperties, checkRequired } = require('./campaign-mcp.cjs')
 const request = campaignClient()
@@ -25,13 +26,24 @@ async function hostTurn(turn, context) {
     { role: 'user', content: JSON.stringify({ turn: { id: turn.id, event_id: turn.event_id, kind: turn.kind, base_version: turn.base_version }, context }) },
   ]
   let dice = 0, checks = 0
+  let seq = 0, last = '', sent = 0
+  const publish = async narration => {
+    if (narration === last || Date.now() - sent < 500) return
+    const body = { lease: turn.lease, version: turn.base_version, seq: ++seq, narration }
+    try { await request(`/turns/${turn.id}/stream`, 'POST', body) }
+    catch (e) {
+      if (e.status && e.status < 500) throw e
+      await request(`/turns/${turn.id}/stream`, 'POST', body)
+    }
+    last = narration; sent = Date.now()
+  }
   const deadline = AbortSignal.timeout(145000)
   for (let step = 0; step < 8; step++) {
     const response = await fetch(base + '/chat/completions', { method: 'POST', redirect: 'error', signal: deadline,
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model, messages, tools: hostTools, tool_choice: 'required', parallel_tool_calls: false, max_tokens: 2400, stream: false }) })
+      body: JSON.stringify({ model, messages, tools: hostTools, tool_choice: 'required', parallel_tool_calls: false, max_tokens: 2400, stream: true }) })
     if (!response.ok) throw Error(`Model service HTTP ${response.status}`)
-    const data = await response.json(), answer = data.choices?.[0]?.message
+    const answer = await modelStream(response, turn.kind === 'summary' ? 'summary' : 'narration', publish)
     if (answer?.tool_calls?.length !== 1) throw Error('Expected one tool call')
     messages.push(answer)
     const call = answer.tool_calls[0], args = JSON.parse(call.function.arguments)

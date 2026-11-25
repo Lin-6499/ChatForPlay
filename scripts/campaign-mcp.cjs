@@ -31,6 +31,7 @@ const outcome = {
   }, required: ['narration', 'phase', 'changes'], additionalProperties: false,
 }
 const tools = [
+  ['campaign_stream', 'Publish ONLY public narration generated so far as a temporary snapshot. Increase seq per lease; retry identical seq and content after network loss. This does not commit game state. Finish with campaign_complete. Never send reasoning, secrets or tool arguments.', 'POST', a => `/turns/${a.turn_id}/stream`, { turn_id: integer, lease: string, version: integer, seq: integer, narration: string }, ['turn_id', 'lease', 'version', 'seq', 'narration']],
   ['campaign_reply_prompt', 'Read the latest public reply choices. Players can always write their own reply; a host token cannot answer for them.', 'GET', '/reply-prompt', {}],
   ['campaign_checks', 'Read locked ability/skill checks and server-computed results. Awaiting choices belong only to the character owner.', 'GET', '/checks', {}],
   ['campaign_check_get', 'Read one check by ID.', 'GET', a => `/checks/${a.check_id}`, { check_id: integer }, ['check_id']],

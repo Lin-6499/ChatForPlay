@@ -19,6 +19,7 @@
 - 娱乐模式按账号、战役和标签页记忆位置，并恢复最近的战役和标签页；冒险日志会补载上次读到的历史记录。会话列表、成员面板、通讯录、设置弹窗、外观编辑器和桌面连接中心也会恢复各自的滚动位置。位置仅保存在当前设备、当前站点，不同步到其他设备。
 - 主持人可随公开叙述提供 1–6 条快捷回复，指定玩家或让成员各自选择；玩家可以修改建议或自由输入。HTTP 与智能体接口见 [快捷回复 API](docs/QUICK_REPLIES.md)。
 - Electron 连接中心、保存服务端地址、托盘常驻、系统通知。
+- 自动记忆桌面窗口大小、位置和最大化状态；更换显示器后将窗口恢复到可见区域。
 - Electron 内置 Go 服务端，可一键启动 Radmin 主机或仅本机体验。
 - 桌面新版后台下载与校验，点击“重启并更新”即可静默升级；支持连接中心、托盘和个人设置入口。
 - 娱乐模式：文字战役、角色卡、服务器掷骰、场景与摘要存档、私密资料和房主确认的设定提案。
@@ -32,9 +33,9 @@
 
 ### 安装并选择位置
 
-**[下载 LinChat 1.2.2 安装包](https://github.com/Lin-6499/ChatForPlay/releases/download/v1.2.2/LinChat-Setup-1.2.2.exe)**
+**[下载 LinChat 1.2.7 安装包](https://github.com/Lin-6499/ChatForPlay/releases/download/v1.2.7/LinChat-Setup-1.2.7.exe)**
 
-1. 下载 `LinChat-Setup-1.2.2.exe`。
+1. 下载 `LinChat-Setup-1.2.7.exe`。
 2. 双击运行，在安装向导中点击**浏览**或直接输入路径，例如 `D:\应用\LinChat`，再点击**安装**。安装后创建桌面、开始菜单快捷方式；最后一页可选择是否立即运行。
 3. 点击预置的 **“LinChat 云端”**，用自己的账号登录。新成员先使用管理员发来的邀请链接注册。
 
@@ -51,9 +52,9 @@
 开发者本地构建后的文件：
 
 ```text
-dist/desktop/1.2.2/LinChat-Setup-1.2.2.exe       可选择安装目录的安装版
-dist/desktop/1.2.2/LinChat-Portable-1.2.2.exe    便携版
-dist/desktop/1.2.2/latest.yml                  自动更新版本与 SHA-512 清单
+dist/desktop/1.2.7/LinChat-Setup-1.2.7.exe       可选择安装目录的安装版
+dist/desktop/1.2.7/LinChat-Portable-1.2.7.exe    便携版
+dist/desktop/1.2.7/latest.yml                  自动更新版本与 SHA-512 清单
 dist/server/linchat-windows-amd64.exe           独立 Windows 服务端
 dist/server/linchat-linux-amd64                 独立 Linux 服务端
 ```

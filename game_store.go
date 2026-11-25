@@ -43,6 +43,11 @@ func migrateGames(db *sql.DB) error {
 	  error TEXT NOT NULL DEFAULT '', result TEXT NOT NULL DEFAULT '{}'
 	);
 	CREATE INDEX IF NOT EXISTS campaign_turns_queue ON campaign_turns(campaign_id,status,id);
+	CREATE TABLE IF NOT EXISTS campaign_drafts (
+	  campaign_id INTEGER PRIMARY KEY REFERENCES campaigns(id),
+	  turn_id INTEGER NOT NULL, lease TEXT NOT NULL, seq INTEGER NOT NULL,
+	  narration TEXT NOT NULL
+	);
 	CREATE TABLE IF NOT EXISTS campaign_turn_steps (
 	  turn_id INTEGER NOT NULL REFERENCES campaign_turns(id), step INTEGER NOT NULL,
 	  assistant TEXT NOT NULL, tool_result TEXT NOT NULL DEFAULT '',

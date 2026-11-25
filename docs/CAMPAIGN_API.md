@@ -489,3 +489,8 @@ JSON 请求体上限 64 KiB，未知字段会被拒绝；下文标为可省略�
 # 主持人快捷回复
 
 发布建议选项、查询待回复问题、玩家选择／自由输入及幂等规则见 [QUICK_REPLIES.md](QUICK_REPLIES.md)。入口为 `POST /messages` 的 `reply_prompt`、回合完成时的 `outcome.reply_prompt`、`GET /reply-prompt` 和 `POST /actions` 的 `reply_to_event_id`／`option_id`。
+# 主持流式扩展（1.2.7）
+
+已实现临时正文通道：`POST /api/v1/campaigns/{id}/turns/{turn}/stream`，
+读取 `GET /api/v1/campaigns/{id}/stream`，并通过成员 WebSocket 的 `campaign.stream` 通知实时刷新。
+最终仍使用 `/complete` 原子确认。字段、幂等与迁移说明见 [HOST_STREAMING.md](HOST_STREAMING.md)。

@@ -15,7 +15,7 @@ async function fixture() {
   await new Promise(resolve=>reserve.close(resolve))
   const url=`http://127.0.0.1:${port}`
   const executable=path.join(data,'fixture-server.exe')
-  fs.copyFileSync(path.join(root,'dist','server','linchat-windows-amd64.exe'),executable)
+  fs.copyFileSync(process.env.LINCHAT_TEST_SERVER || path.join(root,'dist','server','linchat-windows-amd64.exe'),executable)
   const child=spawn(executable,['-listen',`127.0.0.1:${port}`,'-data',data,'-url',url,'-managed'],{stdio:['pipe','pipe','pipe'],windowsHide:true})
   await new Promise((resolve,reject)=>{
     const timeout=setTimeout(()=>reject(Error('Test server did not start')),15000)

@@ -118,7 +118,11 @@ func (a *app) gameActor(r *http.Request) (gameActor, error) {
 func (a *app) gameHTTP(fn func(*http.Request, gameActor) (any, error)) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		g, err := a.gameActor(r)
-		if err == nil && r.Method != "GET" && !a.limiter.allow("game:"+g.key(), 100, time.Minute) {
+		limit, bucket := 100, "game:"
+		if strings.HasSuffix(r.URL.Path, "/stream") {
+			limit, bucket = 300, "game-stream:"
+		}
+		if err == nil && r.Method != "GET" && !a.limiter.allow(bucket+g.key(), limit, time.Minute) {
 			err = gameFail(429, "操作太快，请稍后重试")
 		}
 		var out any
@@ -276,6 +280,8 @@ func (a *app) registerGames(m *http.ServeMux) {
 		"DELETE /api/v1/campaigns/{id}/agent-tokens/{token}": a.gameTokenRevoke,
 		"GET /api/v1/campaigns/{id}/turns":                   a.gameTurns, "POST /api/v1/campaigns/{id}/turns/claim": a.gameClaimHTTP,
 		"POST /api/v1/campaigns/{id}/turns/{turn}/complete": a.gameCompleteHTTP,
+		"POST /api/v1/campaigns/{id}/turns/{turn}/stream":   a.gameStreamHTTP,
+		"GET /api/v1/campaigns/{id}/stream":                 a.gameStreamRead,
 		"POST /api/v1/campaigns/{id}/turns/{turn}/fail":     a.gameFailHTTP,
 		"POST /api/v1/campaigns/{id}/turns/{turn}/retry":    a.gameRetry,
 		"POST /api/v1/campaigns/{id}/host":                  a.gameHost,

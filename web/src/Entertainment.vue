@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, onActivated, onDeactivated, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Icon from './Icon.vue'
+import DiceRoll from './DiceRoll.vue'
+import HostStream from './HostStream.vue'
 import AbilityChecks from './AbilityChecks.vue'
-import { phases, rulesets, modes, abilityNames, type Campaign, type Character, type GameEvent, type Turn, type Proposal, type AgentToken, type AISettings, type GameAPI, type GameUser } from './game-types'
+import { phases, rulesets, modes, abilityNames, type Campaign, type Character, type GameEvent, type Turn, type Proposal, type AgentToken, type AISettings, type GameAPI, type GameUser, type DiceInput, type DiceReceipt } from './game-types'
 import './entertainment.css'
 import { getScrollPosition } from '../../desktop/scroll-memory.mjs'
 import type { ReplyOption, ReplyPromptView } from './game-types'
@@ -227,8 +229,21 @@ async function host(kind: string) {
 async function retry(turn: Turn, skip = false) {
   await run(async () => { await write(`turns/${turn.id}/retry`, { version: current.value!.version, skip }); await refresh() })
 }
-async function roll() {
-  await run(async () => { await write('rolls', diceForm.value); showDice.value = false; diceForm.value.reason = ''; await refresh(); await scrollBottom() })
+async function roll(input: DiceInput): Promise<DiceReceipt> {
+  if (busy.value || !current.value) throw new Error('请等待当前操作完成')
+  busy.value = true; error.value = ''
+  const generation = requestGeneration
+  try {
+    const result = await write<DiceReceipt>('rolls', { ...input })
+    if (!stopped && generation === requestGeneration) {
+      void refresh().then(scrollBottom)
+      if (!showDice.value) emit('notify', `掷骰已记录，合计 ${result.roll.total}`)
+    }
+    return result
+  } catch (e) {
+    if (!stopped && !showDice.value && generation === requestGeneration) error.value = message(e)
+    throw e
+  } finally { busy.value = false }
 }
 function newCharacter() {
   editCharacter.value = { id: 0, campaign_id: current.value!.id, user_id: props.me.id, name: '', role: '', level: 1, hp: 10, max_hp: 10, ac: 10, abilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 }, conditions: '', inventory: '', resources: '', background: '', private_notes: '', version: 0 }
@@ -278,11 +293,16 @@ watch(modalOpen, async open => {
   if (open) {
     returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
     await nextTick()
-    dialog.value?.querySelector<HTMLElement>('input:not([type=checkbox]), textarea, select, button')?.focus()
-  } else { aiForm.value.api_key = ''; returnFocus?.focus() }
+    dialog.value?.querySelector<HTMLElement>(showDice.value ? 'input' : 'input:not([type=checkbox]), textarea, select, button')?.focus()
+  } else {
+    aiForm.value.api_key = ''
+    await nextTick()
+    const target = returnFocus?.matches(':disabled') ? document.querySelector<HTMLElement>('.game-chat-link') : returnFocus
+    target?.focus()
+  }
 })
 function dialogKey(event: KeyboardEvent) {
-  if (event.key === 'Escape' && !busy.value) {
+  if (event.key === 'Escape' && (!busy.value || showDice.value)) {
     showCreate.value = false; showAI.value = false; showDice.value = false; editCharacter.value = null
     event.preventDefault(); return
   }
@@ -342,6 +362,7 @@ onBeforeUnmount(() => { stopped = true; requestGeneration++; clearInterval(timer
             <p v-else class="game-entry-text">{{ e.content }}</p>
             <button v-if="e.kind === 'check'" class="text-button" @click="chooseTab('checks')">查看检定与代价选择</button>
           </article>
+          <HostStream :key="current.id" :campaign-i-d="current.id" :api="api" :completed="events.filter(e => e.kind === 'narration' || e.kind === 'summary').map(e => e.payload.turn_id || 0)" />
         </div>
         <footer class="game-composer">
           <div v-if="replyError" class="game-reply-status" role="status">{{ replyError }}<button class="text-button" @click="loadReplyPrompt(current.id, requestGeneration)">重试</button></div>
@@ -397,8 +418,8 @@ onBeforeUnmount(() => { stopped = true; requestGeneration++; clearInterval(timer
   </div>
 
   <div v-if="modalOpen" class="modal-backdrop game-modal-backdrop" @keydown="dialogKey">
-    <section ref="dialog" class="modal game-modal" :data-scroll-key="scrollKey(`modal/${showCreate ? 'create' : showAI ? 'ai' : showDice ? 'dice' : `character/${editCharacter?.id || 0}`}`)" role="dialog" aria-modal="true" :aria-label="showCreate ? '创建战役' : showAI ? '模型接入设置' : showDice ? '服务器掷骰' : '编辑角色卡'">
-      <header class="modal-header"><h2>{{ showCreate ? '创建战役' : showAI ? '模型接入设置' : showDice ? '服务器掷骰' : '编辑角色卡' }}</h2><button class="icon-button" aria-label="关闭娱乐模式弹窗" :disabled="busy" @click="showCreate = false; showAI = false; showDice = false; editCharacter = null; aiForm.api_key = ''"><Icon name="close" /></button></header>
+    <section ref="dialog" class="modal game-modal" :class="{ 'dice-modal': showDice }" :data-scroll-key="showDice ? undefined : scrollKey(`modal/${showCreate ? 'create' : showAI ? 'ai' : `character/${editCharacter?.id || 0}`}`)" role="dialog" aria-modal="true" :aria-label="showCreate ? '创建战役' : showAI ? '模型接入设置' : showDice ? '服务器掷骰' : '编辑角色卡'">
+      <header class="modal-header"><h2>{{ showCreate ? '创建战役' : showAI ? '模型接入设置' : showDice ? '服务器掷骰' : '编辑角色卡' }}</h2><button class="icon-button" aria-label="关闭娱乐模式弹窗" :disabled="busy && !showDice" @click="showCreate = false; showAI = false; showDice = false; editCharacter = null; aiForm.api_key = ''"><Icon name="close" /></button></header>
       <p v-if="error" class="game-error" role="alert">{{ error }}</p>
       <form v-if="showCreate" class="game-form" @submit.prevent="create">
         <label>战役名称<input v-model="createForm.title" required maxlength="40" placeholder="例如：雾港来信" autofocus /></label>
@@ -417,12 +438,7 @@ onBeforeUnmount(() => { stopped = true; requestGeneration++; clearInterval(timer
         <p class="game-helper">密钥加密保存在当前服务端，不会下发给玩家。云端与本机服务分别配置。</p>
         <div class="game-actions"><button class="primary" :disabled="busy">保存配置</button><button type="button" class="game-button" :disabled="busy || !ai.has_key" @click="testAI">{{ busy ? '处理中…' : '测试已保存的连接' }}</button></div>
       </form>
-      <form v-else-if="showDice" class="game-form" @submit.prevent="roll">
-        <p class="game-helper">这里是通用骰子，不计算分级房规。属性／技能检定请使用“行动检定”，先锁定 DC 与后果。</p>
-        <label>检定目的<input v-model="diceForm.reason" required maxlength="200" placeholder="例如：攻击或伤害掷骰" /></label><label>骰式<input v-model="diceForm.formula" required maxlength="30" spellcheck="false" placeholder="1d20+5" /></label><p class="game-helper">普通：1d20+5 · 伤害：2d6+3<br />优势：2d20kh1+4 · 劣势：2d20kl1+4</p>
-        <label v-if="isOwner">可见范围<select v-model="diceForm.visibility"><option value="public">所有战役成员</option><option value="dm">仅主持秘密</option></select></label>
-        <p class="game-helper">服务器产生随机点数并保存原始骰子与结果。重复提交同一请求不会重掷。</p><button class="primary wide" :disabled="busy">掷骰并记录<Icon name="dice" :size="18" /></button>
-      </form>
+      <DiceRoll v-else-if="showDice" v-model="diceForm" :is-owner="isOwner" :submit="roll" :scroll-key="scrollKey('modal/dice')" @close="showDice = false; diceForm.reason = ''" />
       <form v-else-if="editCharacter" class="game-form" @submit.prevent="saveCharacter">
         <div class="game-form-row"><label>角色名称<input v-model="editCharacter.name" required maxlength="40" /></label><label>职业 / 身份<input v-model="editCharacter.role" required maxlength="60" placeholder="例如：游侠" /></label></div>
         <div class="game-form-row game-numbers"><label>等级<input v-model.number="editCharacter.level" type="number" min="1" max="20" required /></label><label>当前生命<input v-model.number="editCharacter.hp" type="number" min="0" :max="editCharacter.max_hp" required /></label><label>生命上限<input v-model.number="editCharacter.max_hp" type="number" min="1" max="9999" required /></label><label>护甲等级<input v-model.number="editCharacter.ac" type="number" min="0" max="99" required /></label></div>

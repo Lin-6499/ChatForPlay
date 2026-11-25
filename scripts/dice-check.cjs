@@ -1,0 +1,201 @@
+// Headless integration checks; creates and disposes its own local campaign.
+const { chromium } = require('playwright-core')
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
+const root = path.resolve(__dirname, '..')
+const out = path.join(root, 'dist/verification/dice')
+let ownedPreview, preview, url, base
+const checks = [], errors = []
+const record = name => { checks.push({ name, passed: true }); console.log('PASS', name) }
+const api = async suffix => {
+  const response = await fetch(`${base}/api/v1/campaigns/1/${suffix}`)
+  assert.ok(response.ok)
+  return response.json()
+}
+let browser, page
+;(async () => {
+  if (process.env.LINCHAT_DICE_REUSE_PREVIEW === '1') preview = JSON.parse(fs.readFileSync(path.join(out, 'preview.json')))
+  else {
+    ownedPreview = await require('./dice-preview.cjs').preview(0)
+    preview = { url: ownedPreview.preview, fixture: ownedPreview.url }
+  }
+  fs.mkdirSync(out, { recursive: true })
+  url = preview.url; base = new URL(url).origin
+  const baseline = Math.max(0, ...(await api('events')).map(event => event.id))
+  const events = async () => (await api('events')).filter(event => event.id > baseline)
+  const executablePath = ['C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe', 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'].find(fs.existsSync)
+  browser = await chromium.launch({ executablePath, headless: true })
+  const context = await browser.newContext({ viewport: { width: 1264, height: 811 } })
+  page = await context.newPage()
+  page.on('pageerror', e => errors.push(e.message))
+  await page.goto(url)
+  const trigger = page.getByRole('button', { name: '掷骰', exact: true })
+  const settled = () => page.locator('.dice-tray[data-phase="settled"]').waitFor()
+  const reason = () => page.getByLabel('检定目的', { exact: true })
+  const formula = () => page.getByLabel('骰式', { exact: true })
+  const submit = () => page.getByRole('button', { name: '掷骰并记录', exact: true })
+  await trigger.click()
+  assert.equal(await reason().evaluate(e => e === document.activeElement), true)
+  await formula().fill('999d99999')
+  assert.equal(await submit().isDisabled(), true)
+  await formula().fill('2d20kh1+4')
+  await reason().fill('调查石门刻痕 · 动画验证')
+  await page.screenshot({ path: path.join(out, 'ready-desktop.png') })
+  record('Dice form opens with keyboard focus, validates bounds and shows no invented result')
+
+  const requests = []
+  page.on('request', request => { if (request.method() === 'POST' && request.url().endsWith('/rolls')) requests.push(request.postDataJSON()) })
+  await page.evaluate(() => {
+    window.diceFrames = []
+    let previous
+    const sample = time => {
+      if (document.querySelector('.dice-tray')?.dataset.phase !== 'rolling') return
+      if (previous) window.diceFrames.push(time - previous)
+      previous = time; requestAnimationFrame(sample)
+    }
+    const button = document.querySelector('.dice-actions button')
+    button.click(); button.click()
+    requestAnimationFrame(sample)
+  })
+  await page.locator('.dice-tray[data-phase="rolling"]').waitFor()
+  assert.equal(await page.locator('.dice-value').count(), 0)
+  await settled()
+  assert.equal(requests.length, 1)
+  const first = (await events()).find(e => e.content.startsWith('调查石门刻痕 · 动画验证'))
+  assert.ok(first)
+  assert.equal(Number(await page.locator('.dice-total strong').textContent()), first.payload.roll.total)
+  assert.deepEqual(await page.locator('.dice-value').allTextContents(), first.payload.roll.dice.map(String))
+  assert.equal(await page.locator('.dice-kept').filter({ hasText: /^保留$/ }).count(), 1)
+  assert.equal(await page.locator('.dice-kept').filter({ hasText: /^舍弃$/ }).count(), 1)
+  const frames = await page.evaluate(() => window.diceFrames)
+  await page.screenshot({ path: path.join(out, 'result-desktop.png') })
+  record('One click yields one persisted server roll; animation reveals exact points, kept die and total')
+
+  await page.getByRole('button', { name: '再掷一次', exact: true }).click()
+  assert.equal(await page.locator('.dice-total strong').textContent(), '—')
+  await formula().fill('2d20kl1-2')
+  await reason().fill('回复丢失后重试 · 动画验证')
+  let lost
+  const loseResponse = async route => {
+    const response = await route.fetch()
+    lost = await response.json()
+    await route.abort('failed')
+  }
+  await page.route('**/api/v1/campaigns/1/rolls', loseResponse, { times: 1 })
+  await submit().click()
+  await page.locator('.dice-tray[data-phase="error"]').waitFor()
+  assert.ok(lost?.event_id)
+  assert.equal(await page.locator('.dice-value').count(), 0)
+  await page.getByRole('button', { name: '重试本次掷骰', exact: true }).click()
+  await settled()
+  assert.equal(requests.at(-1).client_id, requests.at(-2).client_id)
+  const retried = (await events()).filter(e => e.content.startsWith('回复丢失后重试 · 动画验证'))
+  assert.equal(retried.length, 1)
+  assert.equal(retried[0].id, lost.event_id)
+  assert.equal(Number(await page.locator('.dice-total strong').textContent()), lost.roll.total)
+  record('A lost successful response retries the same operation and preserves disadvantage, negative modifier and result')
+
+  await page.getByRole('button', { name: '完成', exact: true }).click()
+  assert.equal(await trigger.evaluate(e => e === document.activeElement), true)
+  await trigger.click()
+  await formula().fill('1d6')
+  await reason().fill('延迟响应 · 动画验证')
+  let release
+  const gate = new Promise(resolve => { release = resolve })
+  await page.route('**/api/v1/campaigns/1/rolls', async route => { await gate; await route.continue() }, { times: 1 })
+  await submit().click()
+  await page.locator('.dice-tray[data-phase="waiting"]').waitFor()
+  assert.equal(await page.locator('.dice-value').count(), 0)
+  assert.equal(await page.locator('.dice-tray').evaluate(e => e.getAnimations({ subtree: true }).length), 0)
+  await page.screenshot({ path: path.join(out, 'waiting-desktop.png') })
+  await page.keyboard.press('Escape')
+  assert.equal(await page.locator('.dice-modal').count(), 0)
+  assert.equal(await page.getByRole('button', { name: '群聊', exact: true }).evaluate(e => e === document.activeElement), true)
+  const completed = page.waitForResponse(r => r.request().method() === 'POST' && r.url().endsWith('/rolls'))
+  release()
+  const delayed = await (await completed).json()
+  await page.locator(`.game-entry[data-event-id="${delayed.event_id}"]`).waitFor()
+  record('Slow replies stop motion, stay unscored, and can be dismissed; the recorded roll still reaches the journal')
+
+  await trigger.click()
+  await formula().fill('50d1000+10000')
+  await reason().fill('大量骰子 · 动画验证')
+  await page.setViewportSize({ width: 320, height: 568 })
+  await submit().click(); await settled()
+  assert.equal(await page.locator('.dice-slot').count(), 6)
+  await page.getByText('查看全部 50 枚点数', { exact: true }).click()
+  const all = (await events()).find(e => e.content.startsWith('大量骰子 · 动画验证')).payload.roll
+  assert.equal(Number(await page.locator('.dice-total strong').textContent()), all.total)
+  assert.ok((await page.locator('.dice-all-results').textContent()).includes(all.dice.join('、')))
+  for (const width of [320, 390, 768, 1264]) {
+    await page.setViewportSize({ width, height: width <= 390 ? 568 : 811 })
+    const geometry = await page.locator('.dice-actions .primary').evaluate(e => {
+      const r = e.getBoundingClientRect(), x = r.x + r.width / 2, y = r.y + r.height / 2
+      return { reachable: y < innerHeight && e.contains(document.elementFromPoint(x, y)), overflow: document.documentElement.scrollWidth > innerWidth }
+    })
+    assert.deepEqual(geometry, { reachable: true, overflow: false }, `${width}px`)
+  }
+  await page.setViewportSize({ width: 390, height: 780 })
+  await page.screenshot({ path: path.join(out, 'many-mobile.png') })
+  record('50 dice use six bounded animated solids, retain all raw points, and keep the footer reachable at 320–1264px')
+
+  await page.getByRole('button', { name: '完成', exact: true }).click()
+  await trigger.click()
+  await formula().fill('1d20')
+  await reason().fill('主持秘密 · 动画验证')
+  await page.getByLabel('可见范围', { exact: true }).selectOption('dm')
+  await submit().click(); await settled()
+  assert.ok(await page.locator('.dice-private').isVisible())
+  const secret = (await events()).find(e => e.content.startsWith('主持秘密 · 动画验证'))
+  assert.equal(secret.visibility, 'dm')
+  const playerLogin = await fetch(preview.fixture + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-LinChat': '1' }, body: JSON.stringify({ username: 'demo_player', password: 'Fixture-only-password-2026' }) })
+  assert.equal(playerLogin.status, 200)
+  const playerEvents = await fetch(preview.fixture + '/api/v1/campaigns/1/events', { headers: { Cookie: playerLogin.headers.get('set-cookie').split(';')[0] } }).then(r => r.json())
+  assert.ok(!playerEvents.some(e => e.id === secret.id))
+  record('Private roll remains labeled as a host secret and absent from the player event stream')
+
+  const reduced = await browser.newContext({ viewport: { width: 390, height: 780 }, reducedMotion: 'reduce' })
+  const reducedPage = await reduced.newPage()
+  reducedPage.on('pageerror', e => errors.push(e.message))
+  await reducedPage.goto(url)
+  await reducedPage.getByRole('button', { name: '掷骰', exact: true }).click()
+  await reducedPage.getByLabel('检定目的', { exact: true }).fill('减少动态效果 · 动画验证')
+  await reducedPage.getByLabel('骰式', { exact: true }).fill('2d6+3')
+  let releaseReduced
+  const reducedGate = new Promise(resolve => { releaseReduced = resolve })
+  await reducedPage.route('**/api/v1/campaigns/1/rolls', async route => { await reducedGate; await route.continue() }, { times: 1 })
+  const before = await reducedPage.locator('.dice-solid').first().innerHTML()
+  await reducedPage.getByRole('button', { name: '掷骰并记录', exact: true }).click()
+  await reducedPage.locator('.dice-tray[data-phase="waiting"]').waitFor()
+  assert.equal(await reducedPage.locator('.dice-solid').first().innerHTML(), before)
+  assert.equal(await reducedPage.locator('.dice-tray').evaluate(e => e.getAnimations({ subtree: true }).length), 0)
+  releaseReduced()
+  await reducedPage.locator('.dice-tray[data-phase="settled"]').waitFor()
+  assert.match(await reducedPage.locator('[role=status].dice-announcement').textContent(), /掷骰已记录.*合计/)
+  await reducedPage.screenshot({ path: path.join(out, 'reduced-mobile.png') })
+  await reduced.close()
+  record('Reduced motion keeps the solid still, reveals the receipt without artificial delay and announces the total')
+
+  const custom = await browser.newContext({ viewport: { width: 390, height: 780 } })
+  await custom.addInitScript(() => localStorage.setItem('linchat-appearance-v1', JSON.stringify({ version: 1, accent: '#24529b', background: '#111615', panel: '#f3f1eb' })))
+  const light = await custom.newPage()
+  await light.goto(url)
+  await light.getByRole('button', { name: '掷骰', exact: true }).click()
+  await light.getByLabel('检定目的', { exact: true }).fill('自定义配色 · 动画验证')
+  await light.getByLabel('骰式', { exact: true }).fill('1d12')
+  await light.getByRole('button', { name: '掷骰并记录', exact: true }).click()
+  await light.locator('.dice-tray[data-phase="settled"]').waitFor()
+  await light.screenshot({ path: path.join(out, 'custom-light-mobile.png') })
+  const colors = await light.locator('.dice-tray').evaluate(e => ({ text: getComputedStyle(e).color, bg: getComputedStyle(e).backgroundColor }))
+  assert.notEqual(colors.text, colors.bg)
+  await custom.close()
+  record('Dice, form and result inherit the custom light-panel palette independently of the dark canvas')
+  assert.deepEqual(errors, [])
+  fs.writeFileSync(path.join(out, 'results.json'), JSON.stringify({ passed: true, checks, errors, frameTiming: { samples: frames.length, max: Math.max(...frames), mean: frames.reduce((a, b) => a + b, 0) / frames.length }, browser: 'headless' }, null, 2))
+})().catch(async error => {
+  console.error(error)
+  if (page) await page.screenshot({ path: path.join(out, 'failure.png') }).catch(() => {})
+  fs.writeFileSync(path.join(out, 'results.json'), JSON.stringify({ passed: false, checks, errors, error: error.stack }, null, 2))
+  process.exitCode = 1
+}).finally(async () => { await browser?.close(); await ownedPreview?.stop() })

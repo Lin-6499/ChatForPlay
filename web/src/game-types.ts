@@ -9,9 +9,12 @@ export interface Character {
   hp: number; max_hp: number; ac: number; abilities: Record<string, number>; conditions: string
   inventory: string; resources: string; background: string; private_notes?: string; version: number
 }
+export interface DiceInput { formula: string; reason: string; visibility: string }
+export interface DiceResult { formula: string; dice: number[]; kept: number[]; modifier: number; total: number }
+export interface DiceReceipt { event_id: number; turn_id: number; roll: DiceResult }
 export interface GameEvent {
   id: number; actor_id: number; actor: string; kind: string; visibility: string; recipient_id: number; content: string; created_at: number
-  payload: { roll?: { formula: string; dice: number[]; kept: number[]; modifier: number; total: number }; turn_id?: number; reply_prompt?: ReplyPrompt; reply_to_event_id?: number; option_id?: string }
+  payload: { roll?: DiceResult; turn_id?: number; reply_prompt?: ReplyPrompt; reply_to_event_id?: number; option_id?: string }
 }
 export interface ReplyOption { id: string; label: string; content: string }
 export interface ReplyPrompt { target_user_id: number; options: ReplyOption[] }

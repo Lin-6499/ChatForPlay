@@ -52,6 +52,8 @@ const record=test=>{results.push({test,passed:true});console.log('PASS',test)}
     await page.getByLabel('骰式',{exact:true}).fill('2d20kh1+4')
     await page.getByRole('button',{name:'掷骰并记录'}).click()
     await page.locator('.game-journal').getByText('观察码头',{exact:true}).waitFor()
+    await page.locator('.dice-tray[data-phase="settled"]').waitFor()
+    await page.getByRole('button',{name:'完成',exact:true}).click()
     record('Dice dialog records advantage and renders the actual server result')
     await page.getByRole('button',{name:'角色卡',exact:true}).click()
     await page.getByRole('button',{name:'创建我的角色',exact:true}).click()
