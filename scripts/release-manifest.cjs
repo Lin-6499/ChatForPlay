@@ -24,7 +24,8 @@ const files = [
     artifacts.push({ path: file, bytes: fs.statSync(full).size, sha256: h.digest('hex') })
   }
   const manifest = { version, created: new Date().toISOString(), cloud: 'https://chat.linblog.site', artifacts,
-    verification: ['dist/verification/desktop-smoke-results.json', 'dist/verification/auto-update-results.json', 'dist/verification/packaged-check-results.json'] }
+    verification: ['dist/verification/reading-position/results.json', 'dist/verification/ability-checks/results.json', 'dist/verification/entertainment-check-results.json'],
+    verificationScope: 'Headless web and preload checks; no visible Electron or installer smoke test for this release.' }
   fs.writeFileSync(path.join(root, 'dist', 'release-manifest.json'), JSON.stringify(manifest, null, 2))
   const installer = artifacts[0]
   const filename = path.basename(installer.path)
