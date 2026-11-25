@@ -7,6 +7,7 @@
 /desktop/assets/*.ico
 /web/dist/
 /.impeccable/review/
+/.playwright-mcp/
 *.exe
 *.db*
 *.log

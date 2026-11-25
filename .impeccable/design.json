@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-25T03:10:00Z",
+  "title": "Design System: LinChat",
+  "extensions": {
+    "colorMeta": {
+      "accent": {"role":"primary","displayName":"柔和灰绿","tonalRamp":["oklch(15% .015 155)","oklch(26% .025 155)","oklch(38% .035 155)","oklch(49% .04 155)","oklch(61% .045 155)","oklch(72% .045 155)","oklch(84% .03 155)","oklch(95% .012 155)"]},
+      "on-accent": {"role":"neutral","displayName":"按钮深墨","tonalRamp":["oklch(15% .015 155)","oklch(26% .025 155)","oklch(38% .03 155)","oklch(49% .03 155)","oklch(61% .03 155)","oklch(72% .025 155)","oklch(84% .02 155)","oklch(95% .01 155)"]},
+      "canvas": {"role":"neutral","displayName":"深墨画布","tonalRamp":["oklch(15% .008 165)","oklch(26% .012 165)","oklch(38% .015 165)","oklch(49% .015 165)","oklch(61% .015 165)","oklch(72% .012 165)","oklch(84% .01 165)","oklch(95% .005 165)"]},
+      "panel": {"role":"neutral","displayName":"灰绿面板","tonalRamp":["oklch(15% .01 160)","oklch(26% .015 160)","oklch(38% .02 160)","oklch(49% .025 160)","oklch(61% .025 160)","oklch(72% .02 160)","oklch(84% .015 160)","oklch(95% .006 160)"]},
+      "text": {"role":"neutral","displayName":"浅墨文字","tonalRamp":["oklch(15% .005 155)","oklch(26% .01 155)","oklch(38% .012 155)","oklch(49% .015 155)","oklch(61% .015 155)","oklch(72% .012 155)","oklch(84% .01 155)","oklch(95% .005 155)"]},
+      "muted": {"role":"neutral","displayName":"次级墨色","tonalRamp":["oklch(15% .005 160)","oklch(26% .008 160)","oklch(38% .01 160)","oklch(49% .012 160)","oklch(61% .012 160)","oklch(72% .01 160)","oklch(84% .008 160)","oklch(95% .004 160)"]},
+      "selection": {"role":"neutral","displayName":"灰绿选区","tonalRamp":["oklch(15% .01 155)","oklch(26% .018 155)","oklch(38% .025 155)","oklch(49% .03 155)","oklch(61% .03 155)","oklch(72% .025 155)","oklch(84% .018 155)","oklch(95% .008 155)"]}
+    },
+    "typographyMeta": {
+      "display":{"displayName":"认证页标题","purpose":"Existing welcome and connection introduction only; not workspace labels."},
+      "headline":{"displayName":"工作区标题","purpose":"Message and campaign indexes."},
+      "body":{"displayName":"对话正文","purpose":"Readable messages and campaign prose."}
+    },
+    "shadows": [
+      {"name":"dialog","value":"0 24px 80px #00000040","purpose":"Modal elevation."},
+      {"name":"popover","value":"0 10px 32px #00000040","purpose":"Mention suggestions."},
+      {"name":"toast","value":"0 8px 30px #00000040","purpose":"Transient feedback."}
+    ],
+    "motion": [
+      {"name":"state-color","value":"background .16s ease-out","purpose":"Button and navigation feedback."},
+      {"name":"reduced-motion","value":"transition: none; animation-duration: .01ms","purpose":"Respect the system motion preference."}
+    ],
+    "breakpoints": [
+      {"name":"wide","value":"1550px"},
+      {"name":"compact","value":"1050px"},
+      {"name":"launcher-compact","value":"1000px"},
+      {"name":"single-panel","value":"760px"},
+      {"name":"narrow","value":"360px"}
+    ]
+  },
+  "components": [
+    {
+      "name":"Primary action","kind":"button","refersTo":"button-primary","description":"Solid accent, contrast-safe text, no layout motion.",
+      "html":"<button class=\"ds-primary\">应用配色</button>",
+      "css":".ds-primary{font:600 14px 'Segoe UI','Microsoft YaHei',sans-serif;background:var(--accent,#a8c7b5);color:var(--on-accent,#14251b);border:1px solid var(--accent,#a8c7b5);border-radius:8px;padding:12px 20px;min-height:44px;cursor:pointer;transition:background .16s ease-out}.ds-primary:hover{background:var(--accent-hover,#b2cfbd)}.ds-primary:focus-visible{outline:2px solid var(--focus,#a8c7b5);outline-offset:3px}.ds-primary:disabled{opacity:.45;cursor:default}"
+    },
+    {
+      "name":"Secondary action","kind":"button","refersTo":"button-secondary","description":"Complete boundary on a raised surface.",
+      "html":"<button class=\"ds-secondary\">恢复默认</button>",
+      "css":".ds-secondary{font:500 12px 'Segoe UI','Microsoft YaHei',sans-serif;padding:9px 14px;min-height:36px;background:var(--raised,#191e1d);color:var(--raised-text,#edf2ef);border:1px solid var(--border,#5a5f5d);border-radius:7px;cursor:pointer}.ds-secondary:hover{background:var(--hover,#202523)}.ds-secondary:focus-visible{outline:2px solid var(--focus,#a8c7b5);outline-offset:3px}"
+    },
+    {
+      "name":"Text field","kind":"input","refersTo":"text-field","description":"Labeled, bounded input with visible focus.",
+      "html":"<label class=\"ds-label\">连接名称<input class=\"ds-field\" value=\"LinChat 云端\" /></label>",
+      "css":".ds-label{display:flex;flex-direction:column;gap:8px;font:500 13px 'Segoe UI','Microsoft YaHei',sans-serif;color:var(--text,#edf2ef)}.ds-field{font:400 14px 'Segoe UI','Microsoft YaHei',sans-serif;padding:10px 12px;border:1px solid var(--border,#5a5f5d);border-radius:7px;background:var(--field,#161b1a);color:var(--text,#edf2ef)}.ds-field:focus-visible{outline:2px solid var(--focus,#a8c7b5);outline-offset:2px}.ds-field:hover{border-color:var(--focus,#a8c7b5)}"
+    },
+    {
+      "name":"Selected conversation","kind":"nav","refersTo":"conversation-item","description":"Tint and complete border establish selection.",
+      "html":"<button class=\"ds-conversation\" aria-current=\"true\"><b>公共大厅</b><span>开始你们的对话</span></button>",
+      "css":".ds-conversation{display:flex;flex-direction:column;gap:8px;text-align:left;width:100%;padding:15px 11px;border-radius:9px;background:var(--selected,#262f2b);color:var(--selected-text,#edf2ef);border:1px solid var(--selected-line,#4a5952);font:14px 'Segoe UI','Microsoft YaHei',sans-serif;cursor:pointer}.ds-conversation span{font-size:12px;color:var(--selected-muted,#b3bcb6)}.ds-conversation:hover{background:var(--hover,#202523)}.ds-conversation:focus-visible{outline:2px solid var(--focus,#a8c7b5);outline-offset:3px}"
+    },
+    {
+      "name":"Status tag","kind":"chip","refersTo":"status-tag","description":"Quiet secondary classification.",
+      "html":"<span class=\"ds-tag\">公共空间</span>",
+      "css":".ds-tag{display:inline-block;padding:3px 6px;background:var(--selected,#262f2b);color:var(--selected-text,#edf2ef);font:400 10px 'Segoe UI','Microsoft YaHei',sans-serif;border-radius:4px}"
+    },
+    {
+      "name":"Message bubble","kind":"card","refersTo":"message","description":"Readable text on the raised surface.",
+      "html":"<div class=\"ds-message\">无论在哪里，都可以一起聊。</div>",
+      "css":".ds-message{font:14px/1.85 'Segoe UI','Microsoft YaHei',sans-serif;white-space:pre-wrap;overflow-wrap:anywhere;padding:11px 16px;background:var(--raised,#191e1d);color:var(--raised-text,#edf2ef);border:1px solid var(--line,#2b302f);border-radius:3px 12px 12px;max-width:620px}"
+    },
+    {
+      "name":"Selected palette","kind":"custom","description":"A native button previews the three editable colors.",
+      "html":"<button class=\"ds-palette\" aria-pressed=\"true\"><span class=\"ds-colors\"><i></i><i></i><i></i></span><span>墨色</span></button>",
+      "css":".ds-palette{display:flex;flex-direction:column;gap:9px;width:94px;padding:7px 7px 9px;border:1px solid var(--accent-text,#a8c7b5);border-radius:8px;background:var(--selected,#262f2b);color:var(--selected-text,#edf2ef);font:12px 'Segoe UI','Microsoft YaHei',sans-serif;cursor:pointer}.ds-colors{display:grid;grid-template-columns:1fr 1fr .7fr;height:24px;border-radius:4px;overflow:hidden}.ds-colors i:nth-child(1){background:var(--bg,#111615)}.ds-colors i:nth-child(2){background:var(--panel,#1b2220)}.ds-colors i:nth-child(3){background:var(--accent,#a8c7b5)}.ds-palette:hover{background:var(--hover,#202523)}.ds-palette:focus-visible{outline:2px solid var(--focus,#a8c7b5);outline-offset:3px}"
+    }
+  ],
+  "narrative": {
+    "northStar":"墨色书页",
+    "overview":"用深墨色与灰绿层次给对话留出安静的阅读空间。视觉表达来自清晰的排版、稳定的间距和明确的状态，而非装饰性效果。沿用熟悉的通讯界面，让消息、会话与下一步操作容易辨认。\n\n默认深色是用户确认的产品要求；同一套组件也必须适配用户自定义的背景、面板和强调色。现有 LinChat 名称与图标保留。",
+    "keyCharacteristics":["深墨画布与略亮面板区分工作区域。","强调色用于主操作、选中状态和必要提示。","系统字体、细完整边框与克制圆角。","配色预览与实际界面共享同一套计算逻辑。"],
+    "rules":[
+      {"name":"The Independent Surface Rule","body":"Canvas, panel and navigation each derive their own text, muted, border, focus, selected and semantic colors. A light panel on a dark canvas is valid; do not assume that all regions share one foreground.","section":"colors"},
+      {"name":"The Semantic Color Rule","body":"Amber identifies private material, mentions and paused/pending states; red identifies errors; the online marker uses a separately adapted success color. User accent changes do not replace these meanings.","section":"colors"},
+      {"name":"The Reading Priority Rule","body":"Keep message prose larger and more open than timestamps, receipts and navigation metadata.","section":"typography"}
+    ],
+    "dos":["Do use derived semantic variables for every new surface and state.","Do keep primary actions reachable while message or settings content scrolls.","Do preserve readable Chinese body copy and the current responsive navigation.","Do preview custom colors with the same runtime used by the application."],
+    "donts":["Don't hard-code a light panel or dark foreground inside a themed component.","Don't use the user accent to replace error, private or connection semantics.","Don't add ornamental gradients, glow, large promotional labels or entrance animations to the workspace.","Don't interpret a dark default as a restriction on user-selected colors."]
+  }
+}
