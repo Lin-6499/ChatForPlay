@@ -256,6 +256,7 @@ func gameEvent(tx *sql.Tx, c campaign, actor int64, kind, visibility string, rec
 
 func (a *app) registerGames(m *http.ServeMux) {
 	routes := map[string]func(*http.Request, gameActor) (any, error){
+		"GET /api/v1/campaigns/{id}/reply-prompt":           a.gameReplyPromptHTTP,
 		"GET /api/v1/campaigns/{id}/checks":                 a.gameChecks,
 		"GET /api/v1/campaigns/{id}/checks/{check}":         a.gameChecks,
 		"POST /api/v1/campaigns/{id}/checks":                a.gamePrepareCheck,

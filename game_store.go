@@ -69,6 +69,13 @@ func migrateGames(db *sql.DB) error {
 	  UNIQUE(campaign_id,event_id)
 	);
 	CREATE INDEX IF NOT EXISTS campaign_checks_pending ON campaign_checks(campaign_id,character_id,status);
-	PRAGMA user_version=4;`)
+	CREATE TABLE IF NOT EXISTS campaign_replies (
+	  campaign_id INTEGER NOT NULL REFERENCES campaigns(id),
+	  prompt_event_id INTEGER NOT NULL REFERENCES campaign_events(id),
+	  user_id INTEGER NOT NULL REFERENCES users(id),
+	  event_id INTEGER NOT NULL REFERENCES campaign_events(id),
+	  PRIMARY KEY(campaign_id,prompt_event_id,user_id)
+	);
+	PRAGMA user_version=5;`)
 	return err
 }
