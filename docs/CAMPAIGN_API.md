@@ -494,3 +494,10 @@ JSON 请求体上限 64 KiB，未知字段会被拒绝；下文标为可省略�
 已实现临时正文通道：`POST /api/v1/campaigns/{id}/turns/{turn}/stream`，
 读取 `GET /api/v1/campaigns/{id}/stream`，并通过成员 WebSocket 的 `campaign.stream` 通知实时刷新。
 最终仍使用 `/complete` 原子确认。字段、幂等与迁移说明见 [HOST_STREAMING.md](HOST_STREAMING.md)。
+
+## 文字剧本与长期记忆（1.2.10）
+
+新增 `GET/POST /lore`、`GET /lore/{entry}/history`。公开context新增 `lore`，
+包含房主选中的有效公开资料，最多24000字，并通过 `omitted` 提示预算遗漏。
+秘密资料不在公开context中，令牌需秘密授权才可单独读取；保存仅限真人房主。
+完整字段与导入、版本规则见 [CAMPAIGN_LORE.md](CAMPAIGN_LORE.md)。

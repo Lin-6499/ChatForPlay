@@ -31,6 +31,18 @@ func migrateGames(db *sql.DB) error {
 	  content TEXT NOT NULL, payload TEXT NOT NULL DEFAULT '{}', created_at INTEGER NOT NULL
 	);
 	CREATE INDEX IF NOT EXISTS campaign_events_order ON campaign_events(campaign_id,id);
+	CREATE TABLE IF NOT EXISTS campaign_lore (
+	  id INTEGER PRIMARY KEY, campaign_id INTEGER NOT NULL REFERENCES campaigns(id),
+	  kind TEXT NOT NULL, title TEXT NOT NULL, content TEXT NOT NULL,
+	  visibility TEXT NOT NULL, status TEXT NOT NULL, in_context INTEGER NOT NULL,
+	  version INTEGER NOT NULL, updated_at INTEGER NOT NULL
+	);
+	CREATE INDEX IF NOT EXISTS campaign_lore_list ON campaign_lore(campaign_id,status,id);
+	CREATE TABLE IF NOT EXISTS campaign_lore_history (
+	  entry_id INTEGER NOT NULL REFERENCES campaign_lore(id), version INTEGER NOT NULL,
+	  actor_id INTEGER NOT NULL, document TEXT NOT NULL, created_at INTEGER NOT NULL,
+	  PRIMARY KEY(entry_id,version)
+	);
 	CREATE TABLE IF NOT EXISTS campaign_operations (
 	  campaign_id INTEGER NOT NULL REFERENCES campaigns(id), actor TEXT NOT NULL, client_id TEXT NOT NULL,
 	  fingerprint TEXT NOT NULL, response TEXT NOT NULL, PRIMARY KEY(campaign_id,actor,client_id)
@@ -81,6 +93,6 @@ func migrateGames(db *sql.DB) error {
 	  event_id INTEGER NOT NULL REFERENCES campaign_events(id),
 	  PRIMARY KEY(campaign_id,prompt_event_id,user_id)
 	);
-	PRAGMA user_version=5;`)
+	PRAGMA user_version=6;`)
 	return err
 }

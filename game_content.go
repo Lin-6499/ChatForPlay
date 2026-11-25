@@ -265,7 +265,11 @@ func (a *app) gamePublicContext(c campaign) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"state": c, "characters": chars, "events": events, "checks": checks, "check_rule": checkRule, "secret_policy": "这里只含公开资料；秘密通过单独授权接口访问，待公开的线索由房主批准为场景。"}, nil
+	lore, err := a.publicLoreContext(c)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"state": c, "characters": chars, "events": events, "checks": checks, "check_rule": checkRule, "lore": lore, "secret_policy": "这里只含公开资料；秘密通过单独授权接口访问，待公开的线索由房主批准为场景。"}, nil
 }
 func (a *app) gameContextHTTP(r *http.Request, g gameActor) (any, error) {
 	c, err := a.gameAccess(pathID(r, "id"), g)

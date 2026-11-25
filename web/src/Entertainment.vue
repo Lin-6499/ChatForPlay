@@ -3,6 +3,7 @@ import { computed, nextTick, onActivated, onDeactivated, onBeforeUnmount, onMoun
 import Icon from './Icon.vue'
 import DiceRoll from './DiceRoll.vue'
 import HostStream from './HostStream.vue'
+import CampaignLore from './CampaignLore.vue'
 import AbilityChecks from './AbilityChecks.vue'
 import { phases, rulesets, modes, abilityNames, type Campaign, type Character, type GameEvent, type Turn, type Proposal, type AgentToken, type AISettings, type GameAPI, type GameUser, type DiceInput, type DiceReceipt } from './game-types'
 import './entertainment.css'
@@ -51,7 +52,7 @@ const validRecipient = computed(() => privateRecipients.value.some(p => p.id ===
 const myCharacter = computed(() => characters.value.find(c => c.user_id === props.me.id))
 const pendingTurn = computed(() => [...turns.value].reverse().find(t => t.status !== 'done'))
 const tabs = computed(() => [
-  { id: 'journal', label: '冒险日志' }, { id: 'characters', label: '角色卡' }, { id: 'checks', label: '行动检定' }, { id: 'proposals', label: '设定提案' },
+  { id: 'journal', label: '冒险日志' }, { id: 'characters', label: '角色卡' }, { id: 'checks', label: '行动检定' }, { id: 'lore', label: '剧本与记忆' }, { id: 'proposals', label: '设定提案' },
   ...(isOwner.value ? [{ id: 'host', label: '主持台' }, { id: 'agents', label: '智能体接入' }] : []),
 ])
 const showCreate = ref(false), showAI = ref(false), showDice = ref(false), editCharacter = ref<Character | null>(null)
@@ -398,7 +399,7 @@ onBeforeUnmount(() => { stopped = true; requestGeneration++; clearInterval(timer
           <div class="game-compose-bottom"><span>{{ composeKind === 'action' ? current.auto_respond && current.mode !== 'manual' ? '提交后主持人将依次处理 · Ctrl + Enter 提交' : '行动写入日志，由房主继续主持' : composeKind === 'private' ? '私密消息不进入公开 AI 上下文' : '公开内容会同步到战役群聊' }}</span><button class="send-button" :disabled="busy || composing || !draft.trim() || (composeKind === 'action' && current.phase === 'paused') || (composeKind === 'private' && !validRecipient)" @click="submit">{{ composeKind === 'action' ? '提交行动' : composeKind === 'summary' ? '保存摘要' : '发送' }}<Icon name="send" :size="16" /></button></div>
         </footer>
       </template>
-      <div v-else class="game-tab-content" :data-scroll-key="scrollKey(tab)" :data-scroll-ready="journalReady && !busy">
+      <div v-else-if="tab !== 'lore'" class="game-tab-content" :data-scroll-key="scrollKey(tab)" :data-scroll-ready="journalReady && !busy">
         <template v-if="tab === 'characters'">
           <div class="game-section-heading"><div><h3>角色与资源</h3><p>生命值、状态、物品和法术资源随战役保存。</p></div><button v-if="!myCharacter" class="game-button" @click="newCharacter">创建我的角色</button></div>
           <p v-if="!characters.length" class="game-empty-small">还没有角色卡。你和伙伴都可以为自己创建一个角色。</p>
@@ -426,6 +427,7 @@ onBeforeUnmount(() => { stopped = true; requestGeneration++; clearInterval(timer
           <div class="game-token-list"><div v-for="t in tokens" :key="t.id"><span><b>{{ t.label }}</b><small>{{ t.revoked ? '已撤销' : `到期 ${dateTime(t.expires_at)}` }} · {{ t.secrets ? '含秘密权限' : '公开主持' }}</small></span><button v-if="!t.revoked" class="text-button danger" :disabled="busy" @click="revoke(t)">撤销</button></div></div>
         </template>
       </div>
+      <KeepAlive :max="5"><CampaignLore v-if="tab === 'lore'" :key="current.id" class="game-tab-content" :data-scroll-key="scrollKey('lore')" :campaign="current" :api="api" :owner="isOwner" :revision="revision" @changed="refresh" /></KeepAlive>
     </section>
     <section v-else class="game-welcome"><Icon name="dice" :size="48" /><h2>把聊天变成一场冒险</h2><p>创建一个战役，邀请伙伴带上角色入席。<br />由你、Grok 或其他智能体主持，故事与每次掷骰都留在这里。</p><button class="primary" @click="showCreate = true">创建第一场战役<Icon name="plus" :size="18" /></button><p v-if="error" class="game-error" role="alert">{{ error }}</p></section>
   </div>

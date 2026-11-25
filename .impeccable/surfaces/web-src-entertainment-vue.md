@@ -7,6 +7,20 @@ related_targets: ["web/src/entertainment.css","web/src/game-types.ts","web/src/D
 
 # Entertainment mode — existing LinChat surface
 
+## Script and durable memory extension · direction
+
+- Operate mode, existing visual identity unchanged. The user selected TXT/Markdown and pasted text, not PDF/Word.
+- Extend the campaign desk with a “剧本与记忆” tab. Searchable category list joins a plain-text reading/editor area; mobile stacks list then detail without adding modals.
+- Entries cover chapters, NPCs, quests, clues and confirmed facts. Owner-controlled public/secret scope is explicit before save. Only selected active public records enter bounded model context; no automatic private-model injection or AI inference becoming canon.
+- New imports are preview-only until saved. Version history, archive/restore and conflict-preserved drafts provide durable control without destructive deletion.
+- Inherit canvas-local colors, warning tokens, system type, full borders and restrained spacing. Keep reading comfortable and actions reachable in the existing scroll region.
+- Finish with isolated real-server permission/context tests and headless rendered review at desktop/mobile widths.
+
+### Finish evidence
+
+Eight isolated UI scenarios pass: import preview, context selection, unsaved edit retention, revision restore, secret isolation, conflict preservation, file limit rejection, archive/restore and responsive/theme coverage. Backend tests verify token permissions, secret-history filtering, context budgets and running-turn protection.
+Rendered review initially found unthemed list filters; fixed using existing field/focus/selection tokens. Refreshed dark captures at1264/768/390/320 and light1000 show usable editors and reachable save controls; player reader390 contains no secret labels or editing actions. Verdict: ship, scoped to this feature. Mechanical check only notes the intentional custom palette in the test fixture. No new visual system or raster assets introduced.
+
 ## Host streaming · 2026-11-25
 
 - Extend the established journal, with one temporary host entry marked “正在生成 · 尚未入档”; use inherited surface warning/muted tokens, a full border, 16px padding and 9px radius. No typewriter effect or token announcements.
