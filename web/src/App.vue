@@ -363,11 +363,32 @@ function onComposerCursor(e: KeyboardEvent) {
 }
 async function checkDesktopUpdate() {
   if (!desktop?.checkUpdates) return
-  desktopUpdate.value = await desktop.checkUpdates()
+  try {
+    desktopUpdate.value = await desktop.checkUpdates()
+    const state = desktopUpdate.value
+    if (state.error) notify(state.error)
+    if (state.available) dismissedUpdate.value = ''
+    else if (!state.error) notify(`当前已是最新版本 v${state.currentVersion}`)
+  } catch { notify('无法检查更新，请稍后重试') }
+}
+const updateBusy = computed(() => ['downloading', 'installing'].includes(desktopUpdate.value?.status || ''))
+const updateDetail = computed(() => {
   const state = desktopUpdate.value
-  if (state.error) notify(state.error)
-  else if (state.available) dismissedUpdate.value = ''
-  else notify(`当前已是最新版本 v${state.currentVersion}`)
+  if (state?.error) return state.error
+  if (!state?.autoUpdate) return '下载新版安装包，安装后即可使用新功能。'
+  if (state.status === 'ready') return '重启后自动安装，保留安装目录和数据。本机服务会暂时停止。'
+  if (state.status === 'installing') return '正在关闭本机服务，随后自动安装并重启。'
+  return `正在后台下载并校验 · ${Math.floor(state.progress || 0)}%，你可以继续聊天。`
+})
+const updateAction = computed(() => {
+  const state = desktopUpdate.value
+  if (state?.status === 'ready') return '重启并更新'
+  if (state?.status === 'installing') return '正在更新…'
+  if (state?.status === 'downloading') return '下载中…'
+  return state?.autoUpdate ? '重试下载' : '下载更新'
+})
+async function openDesktopUpdate() {
+  try { await desktop?.openUpdate?.() } catch { notify('无法更新，请稍后重试') }
 }
 async function sendFile(file: File, cid = currentID.value, clientID = uid()) {
   if (upload.value || !cid) return
@@ -515,7 +536,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="app-shell" :class="{ 'signed-in': me }">
   <aside v-if="desktopUpdate?.available && dismissedUpdate !== desktopUpdate.latestVersion" class="desktop-update-notice" role="status">
-    <Icon name="download" :size="20" /><div><b>LinChat v{{ desktopUpdate.latestVersion }} 可更新</b><p>下载新版安装包，安装后即可使用新功能。</p></div><button class="text-button" @click="desktop?.openUpdate?.()">下载更新</button><button class="icon-button" aria-label="暂时关闭更新提醒" @click="dismissedUpdate = desktopUpdate.latestVersion"><Icon name="close" :size="16" /></button>
+    <Icon name="download" :size="20" /><div><b>LinChat v{{ desktopUpdate.latestVersion }} {{ desktopUpdate.status === 'ready' ? '已就绪' : '可更新' }}</b><p>{{ updateDetail }}</p></div><button class="text-button" :disabled="updateBusy" @click="openDesktopUpdate">{{ updateAction }}</button><button class="icon-button" aria-label="暂时关闭更新提醒" @click="dismissedUpdate = desktopUpdate.latestVersion"><Icon name="close" :size="16" /></button>
   </aside>
   <div v-if="!ready" class="loading-screen"><img src="/favicon.svg" alt="" width="56" /><p>正在连接 LinChat…</p></div>
   <main v-else-if="!me" class="auth-page">

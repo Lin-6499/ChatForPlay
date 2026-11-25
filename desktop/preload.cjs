@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('linchatDesktop', Object.freeze({
   getUpdateState: () => ipcRenderer.invoke('updates:state'),
   checkUpdates: () => ipcRenderer.invoke('updates:check'),
   openUpdate: () => ipcRenderer.invoke('updates:open'),
+  installUpdate: () => ipcRenderer.invoke('updates:install'),
   onUpdateState: callback => {
     const listener = (_event, state) => callback(state)
     ipcRenderer.on('updates:state', listener)
