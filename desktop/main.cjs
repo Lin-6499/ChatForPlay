@@ -1,5 +1,5 @@
 const { app, BrowserWindow, Menu, Tray, ipcMain, shell, Notification, clipboard, nativeImage, session, dialog } = require('electron')
-const { RELEASE_API, createUpdater } = require('./updates.cjs')
+const { RELEASE_API, UPDATE_FEED, createUpdater } = require('./updates.cjs')
 const { spawn } = require('node:child_process')
 const fs = require('node:fs')
 const path = require('node:path')
@@ -15,12 +15,29 @@ const iconPath = path.join(__dirname, 'assets', 'icon.png')
 let win, tray, host, quitting = false, shutdownStarted = false, selectedOrigin = ''
 let hostState = { running: false, starting: false, url: '', setupURL: '', mode: '', error: '' }
 let profiles = []
-let updater, updateTimer, updateInterval
+let updater, updateTimer, updateInterval, stoppingHost
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) app.quit()
 
 function configPath() { return path.join(app.getPath('userData'), 'connections.json') }
 function hostData() { return path.join(app.getPath('userData'), 'server-data') }
+function updateResumePath() { return path.join(app.getPath('userData'), 'update-resume.json') }
+async function resumeAfterUpdate() {
+  let resume
+  try {
+    resume = JSON.parse(fs.readFileSync(updateResumePath(), 'utf8'))
+    fs.unlinkSync(updateResumePath())
+  } catch { return }
+  if (resume.version !== app.getVersion() || Date.now() - resume.created > 86400000) return
+  try {
+    if (resume.hostMode) await startHost(resume.hostMode)
+    if (resume.localChat && hostState.running) await connect(hostState.setupURL || hostState.url)
+    else if (resume.origin) await connect(resume.origin)
+  } catch (error) {
+    hostState.error = `更新已完成，但恢复连接失败：${error.message}`
+    await openConnections()
+  }
+}
 function isLauncher(event) {
   return event.sender === win?.webContents && event.senderFrame?.url.split('#')[0] === launcherURL
 }
@@ -57,14 +74,19 @@ async function fetchRelease() {
 async function checkUpdatesFromMenu() {
   const state = await updater.check()
   showWindow()
+  const ready = state.status === 'ready'
+  const action = ready || (state.available && !['downloading', 'installing'].includes(state.status))
   const response = await dialog.showMessageBox(win, {
     type: state.error ? 'warning' : 'info', title: 'LinChat · 检查更新',
-    message: state.error || (state.available ? `发现新版本 v${state.latestVersion}` : `当前已是最新版本 v${state.currentVersion}`),
-    detail: state.available ? '下载新版安装包并运行，即可升级 LinChat。' : '程序会在启动后和运行期间自动检查更新。',
-    buttons: state.available ? ['下载新版', '稍后'] : ['知道了'],
-    defaultId: 0, cancelId: state.available ? 1 : 0,
+    message: state.error || (ready ? `v${state.latestVersion} 已下载，等待重启` :
+      state.status === 'downloading' ? `正在后台下载 v${state.latestVersion}（${Math.floor(state.progress)}%）` :
+        state.available ? `发现新版本 v${state.latestVersion}` : `当前已是最新版本 v${state.currentVersion}`),
+    detail: state.autoUpdate ? '新版会自动下载并校验。点击“重启并更新”后静默安装，保留安装目录和本机数据；本机服务会暂时停止。' :
+      '当前为便携版或开发环境，请下载安装版以启用应用内自动更新。',
+    buttons: action ? [ready ? '重启并更新' : state.autoUpdate ? '重试下载' : '下载安装版', '稍后'] : ['知道了'],
+    defaultId: 0, cancelId: action ? 1 : 0,
   })
-  if (state.available && response.response === 0) await updater.open()
+  if (action && response.response === 0) await updater.open()
 }
 function readProfiles() {
   try { profiles = JSON.parse(fs.readFileSync(configPath(), 'utf8')).profiles.filter(p => typeof p.url === 'string' && typeof p.name === 'string') }
@@ -134,6 +156,7 @@ function serverExecutable() {
     : path.join(root, 'dist', 'server', `linchat-${process.platform === 'win32' ? 'windows-amd64.exe' : 'linux-amd64'}`)
 }
 async function startHost(mode) {
+  if (quitting || updater?.getState().status === 'installing') throw new Error('正在准备退出，请在更新完成后启动本机服务')
   if (hostState.running) return hostState
   if (hostState.starting) throw new Error('服务端正在启动')
   if (!['radmin', 'local'].includes(mode)) throw new Error('部署模式无效')
@@ -190,26 +213,38 @@ async function startHost(mode) {
     })
   })
 }
-async function stopHost() {
+async function stopHost({ forUpdate = false } = {}) {
+  if (stoppingHost) return stoppingHost
   const child = host
   if (!child) return
-  await new Promise(resolve => {
-    const timer = setTimeout(() => { child.kill(); resolve() }, 12000)
-    child.once('exit', () => { clearTimeout(timer); resolve() })
+  stoppingHost = new Promise((resolve, reject) => {
+    const exited = () => { clearTimeout(timer); resolve() }
+    const timer = setTimeout(() => {
+      if (forUpdate) {
+        child.removeListener('exit', exited)
+        reject(new Error('本机服务尚未停止，请稍后重试更新。'))
+      } else child.kill()
+    }, 12000)
+    child.once('exit', exited)
     if (child.stdin.writable) child.stdin.end('shutdown\n')
-    else child.kill()
-  })
-  hostState.running = false; hostState.starting = false; hostState.setupURL = ''
-  publishHostState()
+    else if (!forUpdate) child.kill()
+  }).then(() => {
+    hostState.running = false; hostState.starting = false; hostState.setupURL = ''
+    publishHostState()
+  }).finally(() => { stoppingHost = null })
+  return stoppingHost
 }
 
 app.on('second-instance', showWindow)
 app.on('before-quit', event => {
   clearTimeout(updateTimer); clearInterval(updateInterval)
   quitting = true
-  if (host && !shutdownStarted) {
-    event.preventDefault(); shutdownStarted = true
-    stopHost().finally(() => app.quit())
+  if (host) {
+    event.preventDefault()
+    if (!shutdownStarted) {
+      shutdownStarted = true
+      stopHost().finally(() => { shutdownStarted = false; app.quit() })
+    }
   }
 })
 app.on('window-all-closed', () => { if (quitting) app.quit() })
@@ -253,9 +288,38 @@ app.whenReady().then(async () => {
   win.on('enter-full-screen', publishWindowChrome)
   win.on('leave-full-screen', publishWindowChrome)
   win.once('ready-to-show', showWindow)
+  const installed = app.isPackaged && process.platform === 'win32' && !process.env.PORTABLE_EXECUTABLE_FILE &&
+    fs.existsSync(path.join(path.dirname(process.execPath), `Uninstall ${path.basename(process.execPath)}`))
+  const engine = installed ? new (require('electron-updater').NsisUpdater)(UPDATE_FEED) : null
+  if (engine) {
+    engine.installDirectory = path.dirname(process.execPath)
+    engine.disableWebInstaller = true
+  }
   updater = createUpdater({
-    currentVersion: app.getVersion(), fetchRelease,
+    currentVersion: app.getVersion(), fetchRelease, engine,
+    network: async task => {
+      let failure
+      for (const mode of ['system', 'direct']) {
+        await engine.netSession.setProxy({ mode })
+        await engine.netSession.closeAllConnections()
+        try { return await task() } catch (error) {
+          failure = error
+          if (!/net::|ECONN|ETIMEDOUT|ENOTFOUND|socket|timeout|network/i.test(String(error.message))) throw error
+        }
+      }
+      throw failure
+    },
+    prepareInstall: async () => {
+      const resume = { version: updater.getState().latestVersion, created: Date.now(),
+        hostMode: hostState.running || hostState.starting ? hostState.mode : '',
+        localChat: !!selectedOrigin && selectedOrigin === hostState.url, origin: selectedOrigin }
+      await stopHost({ forUpdate: true })
+      fs.mkdirSync(app.getPath('userData'), { recursive: true })
+      fs.writeFileSync(updateResumePath(), JSON.stringify(resume), 'utf8')
+      quitting = true
+    },
     changed: state => {
+      if (state.status === 'error') quitting = false
       if (win && !win.isDestroyed()) {
         const url = win.webContents.getURL()
         if (url.split('#')[0] === launcherURL || (selectedOrigin && url.startsWith(selectedOrigin + '/'))) {
@@ -263,10 +327,11 @@ app.whenReady().then(async () => {
         }
       }
     },
-    announce: version => {
+    announce: (version, status) => {
       if (!Notification.isSupported()) return
-      const notice = new Notification({ title: `LinChat v${version} 可更新`, body: '点击下载新版安装包，体验最新功能。', icon: iconPath })
-      notice.on('click', () => { void updater.open() })
+      const notice = new Notification({ title: `LinChat v${version} ${status === 'ready' ? '已就绪' : '可更新'}`,
+        body: status === 'ready' ? '新版已下载并校验。打开 LinChat，选择“重启并更新”。' : '下载安装版以启用应用内自动更新。', icon: iconPath })
+      notice.on('click', () => { void checkUpdatesFromMenu() })
       notice.show()
     },
     openExternal: url => shell.openExternal(url),
@@ -327,6 +392,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('updates:check', event => { requireDesktopPage(event); return updater.check() })
   ipcMain.handle('updates:open', event => { requireDesktopPage(event); return updater.open() })
   ipcMain.handle('window:chrome', event => { requireDesktopPage(event); return windowChrome() })
+  ipcMain.handle('updates:install', event => { requireDesktopPage(event); return updater.install() })
   ipcMain.handle('appearance:get', event => {
     requireDesktopPage(event)
     try { return normalizeAppearance(JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'appearance.json'), 'utf8'))) }
@@ -354,5 +420,5 @@ app.whenReady().then(async () => {
   ipcMain.handle('launcher:stop-host', async event => { requireLauncher(event); await stopHost(); return hostState })
   ipcMain.handle('launcher:open-data', event => { requireLauncher(event); fs.mkdirSync(hostData(), { recursive: true }); return shell.openPath(hostData()) })
   ipcMain.handle('launcher:copy', (event, text) => { requireLauncher(event); if (typeof text === 'string' && text.length < 5000) clipboard.writeText(text) })
-  void openConnections()
+  void openConnections().then(resumeAfterUpdate)
 })

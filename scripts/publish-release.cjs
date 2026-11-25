@@ -5,6 +5,7 @@ const path = require('node:path')
 const crypto = require('node:crypto')
 const { spawnSync } = require('node:child_process')
 const { fetch, ProxyAgent } = require('undici')
+const { verifyUpdateManifest } = require('./verify-update-manifest.cjs')
 const root = path.resolve(__dirname, '..')
 const { version } = require(path.join(root, 'package.json'))
 const owner = 'Lin-6499', repository = 'ChatForPlay'
@@ -54,10 +55,13 @@ async function digest(file) {
   const manifest = JSON.parse(fs.readFileSync(path.join(root, 'desktop-release.json'), 'utf8'))
   if (manifest.version !== version) throw new Error('Rebuild and regenerate the release manifest first.')
   const installer = path.join(root, 'dist', 'desktop', version, manifest.filename)
+  await verifyUpdateManifest(path.dirname(installer), version)
   if (await digest(installer) !== manifest.sha256) throw new Error('Installer SHA-256 does not match the pinned download manifest.')
   const files = [
     installer,
     path.join(root, 'dist', 'desktop', version, `LinChat-Portable-${version}.exe`),
+    path.join(root, 'dist', 'desktop', version, 'latest.yml'),
+    path.join(root, 'dist', 'desktop', version, `LinChat-Setup-${version}.exe.blockmap`),
     path.join(root, 'dist', 'server', 'linchat-windows-amd64.exe'),
     path.join(root, 'dist', 'server', 'linchat-linux-amd64'),
     path.join(root, 'deploy', 'update-cloud.sh'),
@@ -124,6 +128,7 @@ async function digest(file) {
     console.log(`Uploaded and SHA-256 verified: ${name}`)
   }
   release = await api(`/releases/${release.id}`, 'PATCH', { draft: false, make_latest: 'true' })
+  assets = await api(`/releases/${release.id}/assets`)
   const report = { version, commit, release: release.html_url, publishedAt: release.published_at,
     assets: assets.map(asset => ({ name: asset.name, size: asset.size, digest: asset.digest, url: asset.browser_download_url })) }
   fs.writeFileSync(path.join(root, 'dist', 'github-release.json'), JSON.stringify(report, null, 2) + '\n')

@@ -23,7 +23,7 @@
     <header><span class="desktop-badge">连接中心</span><button id="open-appearance" class="appearance-trigger"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1.6-3.2 1.5 1.5 0 0 1 1.2-2.4H17a4 4 0 0 0 4-4A8.7 8.7 0 0 0 12 3ZM7.5 10h.01M10 6.5h.01M15 7h.01M17.5 10.5h.01"/></svg>外观与配色</button></header>
     <h2>连接你的空间</h2><p class="subtitle">多人实时通信，让想法在同一处相遇。</p>
     <div id="error" class="error" hidden role="alert"></div>
-    <div id="update-banner" class="update-banner" hidden role="status"><div><b id="update-title"></b><p>下载新版安装包，安装后即可使用新功能。</p></div><button id="download-update" class="text-button">下载更新 ↗</button></div>
+    <div id="update-banner" class="update-banner" hidden role="status"><div><b id="update-title"></b><p id="update-detail"></p><progress id="update-progress" max="100" value="0" aria-label="更新下载进度" hidden></progress></div><button id="download-update" class="text-button">下载更新</button></div>
     <div class="tabs" role="tablist"><button class="selected" data-tab="join" role="tab" aria-selected="true">加入聊天</button><button data-tab="host" role="tab" aria-selected="false">本机创建空间</button></div>
     <section id="join-panel">
       <form id="connect-form"><label>连接名称<input id="name" maxlength="60" value="LinChat 云端" placeholder="给这个连接起个名字" /></label><label>服务端地址<input id="url" type="url" required value="https://chat.linblog.site" placeholder="https://chat.linblog.site" /></label><p class="hint">云端填写 HTTPS 地址；Radmin 填写主机的虚拟 IP，例如 http://26.1.2.3:8787。</p><button class="primary" id="connect" type="submit">进入聊天空间</button></form>

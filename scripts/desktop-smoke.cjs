@@ -229,6 +229,10 @@ async function fill(selector, value) {
   win.setMinimumSize(320, 480)
   win.setContentSize(390, 780)
   await waitFor(`innerWidth===390`, 'mobile layout')
+  // Resizing/focusing another native window can blur the combobox and close its
+  // popup. Reopen it through the same interaction a user performs at this size.
+  await evaluate(`document.querySelector('.composer-box textarea').focus();document.querySelector('.composer-box textarea').click()`)
+  await waitFor(`document.querySelectorAll('.mention-option').length===2`, 'mobile mention candidates')
   await evaluate(`new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`)
   const mobileLayout = await evaluate(`(() => {const r=document.querySelector('.mention-picker').getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,scroll:document.documentElement.scrollWidth,width:innerWidth}})()`)
   assert.ok(mobileLayout.left >= 0 && mobileLayout.right <= mobileLayout.width && mobileLayout.top >= 0 && mobileLayout.scroll <= mobileLayout.width)

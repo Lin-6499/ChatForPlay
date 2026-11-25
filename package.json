@@ -1,6 +1,6 @@
 {
   "name": "linchat-desktop",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "LinChat — 云端与 Radmin 虚拟局域网兼容的多人实时通讯",
   "author": "LinChat",
   "private": true,
@@ -11,9 +11,10 @@
     "build:server": "node scripts/build-server.cjs",
     "build": "npm run icons && npm run build:web && npm run build:server",
     "dev": "electron .",
-    "package": "npm run build && electron-builder --win nsis portable --x64",
+    "package": "npm run build && electron-builder --win nsis portable --x64 --publish never",
     "package:dir": "npm run build && electron-builder --win --dir",
     "test:desktop": "electron scripts/desktop-smoke.cjs",
+    "test:auto-update": "node scripts/auto-update-check.cjs",
     "test:features": "node --test scripts/mentions.test.cjs scripts/updates.test.cjs scripts/campaign.test.cjs",
     "test:entertainment": "node scripts/entertainment-check.cjs",
     "test:appearance": "node --test scripts/theme.test.cjs",
@@ -33,6 +34,9 @@
   "build": {
     "appId": "site.linblog.linchat",
     "productName": "LinChat",
+    "publish": [
+      { "provider": "github", "owner": "Lin-6499", "repo": "ChatForPlay" }
+    ],
     "electronDist": "node_modules/electron/dist",
     "directories": {
       "output": "dist/desktop/${version}",
@@ -73,5 +77,8 @@
     "portable": {
       "artifactName": "LinChat-Portable-${version}.${ext}"
     }
+  },
+  "dependencies": {
+    "electron-updater": "6.8.11"
   }
 }

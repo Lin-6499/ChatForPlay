@@ -88,8 +88,18 @@ $('open-data').addEventListener('click', async () => { await api.openData() })
 api.onHostState(host => { if (state) renderHost(host) })
 function renderUpdate(update) {
   $('update-banner').hidden = !update.available
-  $('update-title').textContent = `发现新版本 v${update.latestVersion}`
-  $('check-update').disabled = update.checking
+  const downloading = update.status === 'downloading', ready = update.status === 'ready', installing = update.status === 'installing'
+  $('update-title').textContent = installing ? '正在准备重启…' : ready ? `v${update.latestVersion} 已就绪` :
+    downloading ? `正在下载 v${update.latestVersion} · ${Math.floor(update.progress)}%` : `发现新版本 v${update.latestVersion}`
+  $('update-detail').textContent = update.error || (update.autoUpdate ?
+    installing ? '正在关闭本机服务，随后自动安装并重启。' : ready ? '重启后自动安装，保留安装目录和数据。本机服务会暂时停止。' :
+      '后台下载并校验，你可以继续聊天。' : '下载安装版以启用自动更新；便携版需手动更换程序。')
+  $('update-progress').hidden = !downloading
+  $('update-progress').value = update.progress || 0
+  $('download-update').textContent = installing ? '正在更新…' : ready ? '重启并更新' :
+    downloading ? '下载中…' : update.autoUpdate ? '重试下载' : '下载安装版'
+  $('download-update').disabled = downloading || installing
+  $('check-update').disabled = update.checking || installing
   $('check-update').textContent = update.checking ? '检查中…' : '检查更新'
 }
 api.onUpdateState(renderUpdate)
@@ -102,7 +112,11 @@ $('check-update').addEventListener('click', async () => {
     else if (!update.available) toast(`当前已是最新版本 v${update.currentVersion}`)
   } catch (e) { error(e) }
 })
-$('download-update').addEventListener('click', () => api.openUpdate().catch(error))
+$('download-update').addEventListener('click', async () => {
+  $('download-update').disabled = true
+  try { await api.openUpdate() } catch (e) { error(e) }
+  finally { renderUpdate(await api.getUpdateState()) }
+})
 api.getState().then(s => {
   state = s; $('version').textContent = 'v' + s.version
   $('adapter').textContent = s.adapters.length ? 'Radmin VPN 已就绪 · ' + s.adapters.join(' / ') : '未检测到 Radmin IPv4 网卡，请先安装并连接 VPN'

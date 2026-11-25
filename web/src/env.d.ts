@@ -5,6 +5,11 @@ interface DesktopUpdateState {
   checking: boolean
   checkedAt: number
   error: string
+  autoUpdate?: boolean
+  status?: 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'installing' | 'error'
+  progress?: number
+  transferred?: number
+  total?: number
 }
 interface Window {
   linchatDesktop?: {
@@ -13,7 +18,8 @@ interface Window {
     notify(title: string, body: string): Promise<void>
     getUpdateState?(): Promise<DesktopUpdateState>
     checkUpdates?(): Promise<DesktopUpdateState>
-    openUpdate?(): Promise<void>
+    openUpdate?(): Promise<DesktopUpdateState | void>
+    installUpdate?(): Promise<DesktopUpdateState>
     onUpdateState?(callback: (state: DesktopUpdateState) => void): () => void
     getAppearance?(): Promise<import('../../desktop/theme.mjs').Appearance | null>
     setAppearance?(value: import('../../desktop/theme.mjs').Appearance): Promise<import('../../desktop/theme.mjs').Appearance>
