@@ -4,6 +4,7 @@ import Icon from './Icon.vue'
 import AbilityChecks from './AbilityChecks.vue'
 import { phases, rulesets, modes, abilityNames, type Campaign, type Character, type GameEvent, type Turn, type Proposal, type AgentToken, type AISettings, type GameAPI, type GameUser } from './game-types'
 import './entertainment.css'
+import { getScrollPosition } from '../../desktop/scroll-memory.mjs'
 
 const props = defineProps<{ me: GameUser; people: GameUser[]; api: GameAPI; revision: number }>()
 const emit = defineEmits<{ notify: [text: string]; chat: [conversationID: number] }>()
@@ -13,6 +14,10 @@ const characters = ref<Character[]>([]), events = ref<GameEvent[]>([]), turns = 
 const proposals = ref<Proposal[]>([]), tokens = ref<AgentToken[]>([]), ai = ref<AISettings>({ enabled: false, has_key: false })
 const tab = ref('journal'), mobileOpen = ref(false), error = ref(''), busy = ref(false), draft = ref(''), composeKind = ref('action'), recipient = ref(0)
 const journal = ref<HTMLElement>(), composing = ref(false), canOlder = ref(true)
+const journalReady = ref(false)
+const scrollKey = (part: string, cid = current.value?.id || 0) => `${props.me.id}/campaign/${cid}/${part}`
+const savedView = (key: string) => { try { return localStorage.getItem(`linchat-game-view:${props.me.id}:${key}`) || '' } catch { return '' } }
+const saveView = (key: string, value: string) => { try { localStorage.setItem(`linchat-game-view:${props.me.id}:${key}`, value) } catch {} }
 const isOwner = computed(() => current.value?.owner_id === props.me.id)
 const privateRecipients = computed(() => members.value.filter(p => p.id !== props.me.id && (isOwner.value || p.id === current.value?.owner_id)))
 const validRecipient = computed(() => privateRecipients.value.some(p => p.id === recipient.value))
@@ -38,7 +43,6 @@ const uid = () => Array.from(crypto.getRandomValues(new Uint8Array(18)), n => n.
 const endpoint = (suffix: string, id = current.value?.id) => `/v1/campaigns/${id}/${suffix}`
 const message = (e: unknown) => e instanceof Error ? e.message : '暂时无法连接，请稍后重试'
 const dateTime = (value: number) => new Date(value).toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-const atBottom = () => !journal.value || journal.value.scrollHeight - journal.value.scrollTop - journal.value.clientHeight < 100
 async function scrollBottom() { await nextTick(); if (journal.value) journal.value.scrollTop = journal.value.scrollHeight }
 async function write<T = any>(suffix: string, body: Record<string, unknown>, method = 'POST'): Promise<T> {
   const path = endpoint(suffix), fingerprint = `${path}:${JSON.stringify(body)}`
@@ -55,9 +59,9 @@ async function run(task: () => Promise<void>) {
   finally { busy.value = false }
 }
 async function refresh() {
-  if (refreshing.value || stopped || !active) return
+  if (refreshing.value || stopped || !active || (current.value && !journalReady.value)) return
   refreshing.value = true
-  const generation = requestGeneration, cid = current.value?.id, shouldScroll = atBottom()
+  const generation = requestGeneration, cid = current.value?.id
   let listed = false
   try {
     const [list, settings] = await Promise.all([props.api<Campaign[]>('/v1/campaigns'), props.api<AISettings>('/v1/entertainment/ai')])
@@ -74,7 +78,6 @@ async function refresh() {
       current.value = state; characters.value = chars; turns.value = queue
       const map = new Map(events.value.map(e => [e.id, e])); for (const e of log) map.set(e.id, e)
       events.value = [...map.values()].sort((a, b) => a.id - b.id)
-      if (shouldScroll) await scrollBottom()
     }
   } catch (e) {
     if (generation === requestGeneration) {
@@ -86,8 +89,13 @@ async function refresh() {
 }
 async function select(c: Campaign, afterCreate = false) {
   if (busy.value && !afterCreate) return
+  if (current.value?.id === c.id && journalReady.value) { mobileOpen.value = true; return }
   if (current.value) drafts.set(current.value.id, { content: draft.value, kind: composeKind.value, recipient: recipient.value })
   const generation = ++requestGeneration
+  const previousTab = savedView(`tab:${c.id}`)
+  const position = getScrollPosition(scrollKey('journal', c.id))
+  journalReady.value = false
+  saveView('campaign', String(c.id))
   history.replaceState(null, '', `#campaign=${c.id}`)
   current.value = c; events.value = []; characters.value = []; turns.value = []; proposals.value = []; tokens.value = []; issuedToken.value = null
   const saved = drafts.get(c.id)
@@ -101,24 +109,46 @@ async function select(c: Campaign, afterCreate = false) {
       props.api<{ members: GameUser[] }>(`/conversations/${c.conversation_id}`),
     ])
     if (stopped || generation !== requestGeneration) return
-    current.value = state; characters.value = chars; events.value = log; turns.value = queue
-    members.value = users.members.filter(m => m.id !== c.bot_id); canOlder.value = log.length === 80
+    // Fetch older pages until the saved item is present. Each response is bounded
+    // to 80 items; switching campaigns invalidates the entire restoration.
+    let history = log, hasOlder = log.length === 80
+    const anchor = Number(position?.anchor || 0)
+    while (anchor > 0 && !position?.bottom && hasOlder && history.length && history[0]!.id > anchor) {
+      const before = history[0]!.id
+      const page = await props.api<GameEvent[]>(endpoint(`events?before=${before}`, c.id))
+      if (stopped || generation !== requestGeneration) return
+      if (!page.length || page[0]!.id >= before) { hasOlder = false; break }
+      history = [...page, ...history]; hasOlder = page.length === 80
+    }
+    current.value = state; characters.value = chars; events.value = history; turns.value = queue
+    members.value = users.members.filter(m => m.id !== c.bot_id); canOlder.value = hasOlder
     if (!validRecipient.value) recipient.value = privateRecipients.value[0]?.id || 0
-    await scrollBottom()
-  } catch (e) { if (generation === requestGeneration) error.value = message(e) }
+    journalReady.value = true
+    if (previousTab && tabs.value.some(t => t.id === previousTab)) await chooseTab(previousTab)
+  } catch (e) { if (generation === requestGeneration) { error.value = message(e); journalReady.value = true } }
 }
 async function chooseTab(value: string) {
   if (busy.value) return
   tab.value = value; error.value = ''
   if (!current.value) return
+  saveView(`tab:${current.value.id}`, value)
+  const cid = current.value.id, generation = requestGeneration
   await run(async () => {
     if (value === 'host') {
       hostForm.value = { scene: current.value!.scene, mode: current.value!.mode, auto_respond: current.value!.auto_respond }
       hostVersion.value = current.value!.version
-      note.value = await props.api(endpoint('dm-notes')); noteDraft.value = note.value.content
+      const result = await props.api<typeof note.value>(endpoint('dm-notes', cid))
+      if (generation !== requestGeneration) return
+      note.value = result; noteDraft.value = note.value.content
     }
-    if (value === 'proposals') proposals.value = await props.api(endpoint('story-proposals'))
-    if (value === 'agents') tokens.value = await props.api(endpoint('agent-tokens'))
+    if (value === 'proposals') {
+      const result = await props.api<Proposal[]>(endpoint('story-proposals', cid))
+      if (generation === requestGeneration) proposals.value = result
+    }
+    if (value === 'agents') {
+      const result = await props.api<AgentToken[]>(endpoint('agent-tokens', cid))
+      if (generation === requestGeneration) tokens.value = result
+    }
   })
 }
 async function create() {
@@ -190,9 +220,7 @@ async function older() {
   if (!events.value.length) return
   await run(async () => {
     const log = await props.api<GameEvent[]>(endpoint(`events?before=${events.value[0].id}`))
-    const height = journal.value?.scrollHeight || 0
     events.value = [...log, ...events.value]; canOlder.value = log.length === 80
-    await nextTick(); if (journal.value) journal.value.scrollTop += journal.value.scrollHeight - height
   })
 }
 function scheduleRefresh() { if (!active) return; clearTimeout(refreshTimer); refreshTimer = setTimeout(() => { void refresh() }, 180) }
@@ -222,7 +250,8 @@ onDeactivated(() => { active = false; clearTimeout(refreshTimer) })
 function onVisible() { if (!document.hidden) scheduleRefresh() }
 onMounted(async () => {
   await refresh()
-  const linked = campaigns.value.find(c => location.hash === `#campaign=${c.id}`)
+  const linked = campaigns.value.find(c => location.hash === `#campaign=${c.id}`) ||
+    campaigns.value.find(c => String(c.id) === savedView('campaign'))
   if (linked) await select(linked)
   else if (campaigns.value.length && !matchMedia('(max-width:760px)').matches) await select(campaigns.value[0])
   timer = setInterval(() => { if (!document.hidden) void refresh() }, 15000)
@@ -235,7 +264,7 @@ onBeforeUnmount(() => { stopped = true; requestGeneration++; clearInterval(timer
   <div class="game-layout" :class="{ 'game-open': mobileOpen && current }" :inert="modalOpen">
     <aside class="game-index">
       <header><div><h1>娱乐模式</h1><p>一起写下你们的冒险。</p></div><button class="icon-button outlined" aria-label="新建战役" @click="showCreate = true; error = ''"><Icon name="plus" /></button></header>
-      <div class="game-campaigns" aria-label="我的战役">
+      <div class="game-campaigns" :data-scroll-key="`${me.id}/campaigns`" aria-label="我的战役">
         <p v-if="loading" class="game-empty-small">正在读取战役存档…</p>
         <div v-if="listError" class="game-index-error" role="alert"><b>战役暂时未能加载</b><p>{{ listError }}</p><button class="game-button" :disabled="refreshing" @click="refresh">{{ refreshing ? '正在重试…' : '重试加载战役' }}</button></div>
         <button v-for="c in campaigns" :key="c.id" class="game-campaign" :class="{ selected: current?.id === c.id }" :disabled="busy" @click="select(c)"><Icon name="dice" :size="24" /><span><b>{{ c.title }}</b><small>{{ phases[c.phase] }} · {{ rulesets[c.ruleset] }}</small></span><span v-if="c.owner_id === me.id" class="game-owner-label">房主</span></button>
@@ -243,7 +272,7 @@ onBeforeUnmount(() => { stopped = true; requestGeneration++; clearInterval(timer
       </div>
       <footer><span class="game-model-state"><i class="status-dot" :class="{ offline: !ai.enabled || !ai.has_key }"></i>{{ ai.enabled && ai.has_key ? '内置 AI 已配置' : '可先使用手动主持' }}</span><button v-if="me.admin" class="text-button" @click="openAI"><Icon name="settings" :size="15" />模型设置</button></footer>
     </aside>
-    <section v-if="current" class="game-room" :aria-label="current.title">
+    <section v-if="current" class="game-room" :data-scroll-key="scrollKey('room')" :aria-label="current.title">
       <header class="game-room-header">
         <button class="icon-button game-back" aria-label="返回战役列表" @click="mobileOpen = false"><Icon name="arrow" /></button>
         <div class="game-room-title"><h2>{{ current.title }}</h2><p>{{ rulesets[current.ruleset] }}<span>·</span>{{ modes[current.mode] }}<span>·</span>存档 v{{ current.version }}</p></div>
@@ -256,10 +285,10 @@ onBeforeUnmount(() => { stopped = true; requestGeneration++; clearInterval(timer
       <template v-if="tab === 'journal'">
         <details class="game-scene" :open="!events.length"><summary><Icon name="book" :size="17" /><b>当前场景</b><span>{{ current.scene || '等待房主铺开第一幕' }}</span></summary><p>{{ current.scene || '房主可在主持台填写起始场景，再继续战役。' }}</p><div v-if="current.summary" class="game-summary"><h3>上次的故事</h3><p>{{ current.summary }}</p></div></details>
         <div v-if="pendingTurn?.status === 'failed' || (pendingTurn?.status === 'running' && Date.now() - pendingTurn.started_at > 180000)" class="game-turn-error" role="status"><div><b>主持暂未完成</b><p>{{ pendingTurn.error || '回合已超时，已掷骰结果会保留。' }}</p></div><template v-if="isOwner"><button class="game-button" :disabled="busy" @click="retry(pendingTurn)">重试</button><button class="text-button" :disabled="busy" @click="retry(pendingTurn, true)">跳过</button></template></div>
-        <div ref="journal" class="game-journal" role="log" aria-label="战役日志">
+        <div ref="journal" class="game-journal" :data-scroll-key="scrollKey('journal')" :data-scroll-ready="journalReady" data-scroll-follow role="log" aria-label="战役日志">
           <button v-if="canOlder && events.length" class="history-button" :disabled="busy" @click="older">读取更早的记录</button>
           <div v-if="!events.length" class="game-journal-empty"><Icon name="book" :size="36" /><h3>第一幕，等你落笔</h3><p>准备角色卡，确认场景，然后由房主继续战役。<br />提交行动会写入存档；闲聊请使用右上角的群聊。</p><button v-if="!myCharacter" class="text-button" @click="newCharacter">创建我的角色<Icon name="arrow-right" :size="16" /></button></div>
-          <article v-for="e in events" :key="e.id" class="game-entry" :class="[e.kind, { private: e.visibility !== 'public' }]" :data-event-id="e.id">
+          <article v-for="e in events" :key="e.id" class="game-entry" :class="[e.kind, { private: e.visibility !== 'public' }]" :data-event-id="e.id" :data-scroll-anchor="e.id">
             <div class="game-entry-meta"><b>{{ e.kind === 'narration' || e.kind === 'summary' ? '主持人' : e.actor }}</b><span>{{ ({ action: '行动', roll: '服务器掷骰', summary: '本次摘要', narration: '叙述', setting: '设定更新', request: '主持请求', whisper: '私密消息' } as Record<string,string>)[e.kind] || e.kind }}</span><span v-if="e.visibility !== 'public'" class="game-secret-label"><Icon name="lock" :size="12" />{{ e.visibility === 'dm' ? '主持秘密' : '仅双方与房主' }}</span><time>{{ dateTime(e.created_at) }}</time></div>
             <div v-if="e.payload.roll" class="game-dice-result"><Icon name="dice" :size="27" /><strong>{{ e.payload.roll.total }}</strong><div><b>{{ e.payload.roll.formula }}</b><p>{{ e.content.split('\n')[0].split(' · ')[0] }}</p><small>实际骰子 {{ e.payload.roll.dice.join('、') }} · 保留 {{ e.payload.roll.kept.join('、') }} · 修正 {{ e.payload.roll.modifier >= 0 ? '+' : '' }}{{ e.payload.roll.modifier }}</small></div></div>
             <p v-else class="game-entry-text">{{ e.content }}</p>
@@ -272,7 +301,7 @@ onBeforeUnmount(() => { stopped = true; requestGeneration++; clearInterval(timer
           <div class="game-compose-bottom"><span>{{ composeKind === 'action' ? current.auto_respond && current.mode !== 'manual' ? '提交后主持人将依次处理 · Ctrl + Enter 提交' : '行动写入日志，由房主继续主持' : composeKind === 'private' ? '私密消息不进入公开 AI 上下文' : '公开内容会同步到战役群聊' }}</span><button class="send-button" :disabled="busy || composing || !draft.trim() || (composeKind === 'action' && current.phase === 'paused') || (composeKind === 'private' && !validRecipient)" @click="submit">{{ composeKind === 'action' ? '提交行动' : composeKind === 'summary' ? '保存摘要' : '发送' }}<Icon name="send" :size="16" /></button></div>
         </footer>
       </template>
-      <div v-else class="game-tab-content">
+      <div v-else class="game-tab-content" :data-scroll-key="scrollKey(tab)" :data-scroll-ready="journalReady && !busy">
         <template v-if="tab === 'characters'">
           <div class="game-section-heading"><div><h3>角色与资源</h3><p>生命值、状态、物品和法术资源随战役保存。</p></div><button v-if="!myCharacter" class="game-button" @click="newCharacter">创建我的角色</button></div>
           <p v-if="!characters.length" class="game-empty-small">还没有角色卡。你和伙伴都可以为自己创建一个角色。</p>
@@ -305,7 +334,7 @@ onBeforeUnmount(() => { stopped = true; requestGeneration++; clearInterval(timer
   </div>
 
   <div v-if="modalOpen" class="modal-backdrop game-modal-backdrop" @keydown="dialogKey">
-    <section ref="dialog" class="modal game-modal" role="dialog" aria-modal="true" :aria-label="showCreate ? '创建战役' : showAI ? '模型接入设置' : showDice ? '服务器掷骰' : '编辑角色卡'">
+    <section ref="dialog" class="modal game-modal" :data-scroll-key="scrollKey(`modal/${showCreate ? 'create' : showAI ? 'ai' : showDice ? 'dice' : `character/${editCharacter?.id || 0}`}`)" role="dialog" aria-modal="true" :aria-label="showCreate ? '创建战役' : showAI ? '模型接入设置' : showDice ? '服务器掷骰' : '编辑角色卡'">
       <header class="modal-header"><h2>{{ showCreate ? '创建战役' : showAI ? '模型接入设置' : showDice ? '服务器掷骰' : '编辑角色卡' }}</h2><button class="icon-button" aria-label="关闭娱乐模式弹窗" :disabled="busy" @click="showCreate = false; showAI = false; showDice = false; editCharacter = null; aiForm.api_key = ''"><Icon name="close" /></button></header>
       <p v-if="error" class="game-error" role="alert">{{ error }}</p>
       <form v-if="showCreate" class="game-form" @submit.prevent="create">

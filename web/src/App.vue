@@ -746,7 +746,7 @@ onBeforeUnmount(() => {
     </section>
   </main>
 
-   <main v-else class="workspace" :inert="modal ? true : undefined" :class="{ 'mobile-chat': showMobileChat && !entertainment, 'entertainment-workspace': entertainment }">
+   <main v-else class="workspace" :data-scroll-key="`${me.id}/workspace/${currentID}`" :inert="modal ? true : undefined" :class="{ 'mobile-chat': showMobileChat && !entertainment, 'entertainment-workspace': entertainment }">
     <nav class="rail" aria-label="主导航">
       <a class="rail-logo" href="/" title="LinChat"><img src="/favicon.svg" alt="LinChat" /></a>
        <button class="rail-button" :class="{ active: !entertainment }" title="消息" aria-label="消息" @click="entertainment = false; showMobileChat = false"><Icon name="chat" /><span v-if="totalUnread" class="rail-unread"></span></button>
@@ -768,7 +768,7 @@ onBeforeUnmount(() => {
       <header class="list-heading"><h1>消息<span class="count-pill">{{ conversations.length }}</span></h1><button class="icon-button outlined" title="新建群聊" aria-label="新建群聊" @click="openModal('group')"><Icon name="plus" /></button></header>
       <div class="search-box"><Icon name="search" :size="17" /><input v-model="query" aria-label="搜索会话" placeholder="搜索会话…" /></div>
       <div class="list-subtitle"><span>全部会话</span><span>{{ onlineCount }} 人在线</span></div>
-      <div class="conversation-list">
+       <div class="conversation-list" :data-scroll-key="`${me.id}/conversations/${query ? 'filtered' : 'all'}`">
         <button v-for="c in filteredConversations" :key="c.id" class="conversation-row" :class="{ selected: currentID === c.id }" @click="selectConversation(c)">
           <span class="avatar" :class="c.kind === 'lobby' ? 'dark' : hue(c.id)"><Icon v-if="c.kind === 'lobby'" name="globe" :size="22" /><Icon v-else-if="c.kind === 'group'" name="users" :size="21" /><template v-else>{{ avatar(c.name) }}</template></span>
           <span class="conversation-text"><span class="conversation-title">{{ c.name }}<small>{{ time(c.last_at) }}</small></span><span class="preview"><strong v-if="c.unread_mentions" class="mention-unread" :aria-label="`${c.unread_mentions} 条消息提到了你`">@我</strong><span class="preview-text">{{ c.preview }}</span><b v-if="c.unread" class="unread">{{ c.unread > 99 ? '99+' : c.unread }}</b></span></span>
@@ -840,7 +840,7 @@ onBeforeUnmount(() => {
    </main>
 
   <div v-if="modal" class="modal-backdrop" @click.self="modal = ''" @keydown.esc="modal = ''">
-    <section ref="modalElement" class="modal" :class="{ 'appearance-modal': modal === 'appearance' }" role="dialog" aria-modal="true" tabindex="-1" :aria-label="{directory:'通讯录',group:'新建群聊',invite:'邀请成员',settings:'个人设置',appearance:'外观与配色',connection:'服务端连接',members:'会话成员',addMembers:'添加群成员'}[modal]">
+    <section ref="modalElement" class="modal" :data-scroll-key="`${me?.id || 0}/modal/${modal}/${['members', 'addMembers'].includes(modal) ? currentID : ''}/${modal === 'directory' && directoryQuery ? 'filtered' : 'all'}`" :class="{ 'appearance-modal': modal === 'appearance' }" role="dialog" aria-modal="true" tabindex="-1" :aria-label="{directory:'通讯录',group:'新建群聊',invite:'邀请成员',settings:'个人设置',appearance:'外观与配色',connection:'服务端连接',members:'会话成员',addMembers:'添加群成员'}[modal]">
       <header class="modal-header"><h2>{{ {directory:'通讯录',group:'新建群聊',invite:'邀请成员',settings:'个人设置',appearance:'外观与配色',connection:'服务端连接',members:'会话成员',addMembers:'添加群成员'}[modal] }}</h2><button class="icon-button" aria-label="关闭弹窗" @click="modal = ''"><Icon name="close" /></button></header>
       <p v-if="error" class="error" role="alert">{{ error }}</p>
       <template v-if="modal === 'directory'">
