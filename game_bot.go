@@ -213,8 +213,11 @@ type gameModelMessage struct {
 }
 
 func (a *app) gameModel(ctx context.Context, s gameAIConfig, messages []gameModelMessage, tools []any) (gameModelMessage, error) {
+	return a.gameModelStreaming(ctx, s, messages, tools, "", nil)
+}
+func (a *app) gameModelStreaming(ctx context.Context, s gameAIConfig, messages []gameModelMessage, tools []any, field string, publish func(string) error) (gameModelMessage, error) {
 	var result gameModelMessage
-	body := map[string]any{"model": s.Model, "messages": messages, "max_tokens": 2400, "stream": false}
+	body := map[string]any{"model": s.Model, "messages": messages, "max_tokens": 2400, "stream": publish != nil}
 	if len(tools) > 0 {
 		body["tools"] = tools
 		body["tool_choice"] = "required"
@@ -234,6 +237,9 @@ func (a *app) gameModel(ctx context.Context, s gameAIConfig, messages []gameMode
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
 		return result, gameFail(502, fmt.Sprintf("模型服务返回 HTTP %d，请检查密钥、模型权限或额度", resp.StatusCode))
+	}
+	if strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
+		return readGameModelStream(resp.Body, field, publish)
 	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20+1))
 	if err != nil || len(data) > 1<<20 {
@@ -390,6 +396,25 @@ func (a *app) runGameTurn(cid int64, g gameActor, t gameTurn) error {
 	}
 	ctx, cancel := context.WithTimeout(a.gameCtx, 150*time.Second)
 	defer cancel()
+	var seq int64
+	var lastText string
+	var lastSent time.Time
+	field := "narration"
+	if t.Kind == "summary" {
+		field = "summary"
+	}
+	publish := func(text string) error {
+		if text == lastText || time.Since(lastSent) < 350*time.Millisecond {
+			return nil
+		}
+		seq++
+		_, err := a.streamGame(cid, t.ID, g, gameStreamInput{Lease: t.Lease, Version: t.BaseVersion, Seq: seq, Narration: text})
+		if err == nil {
+			lastText = text
+			lastSent = time.Now()
+		}
+		return err
+	}
 	for step := range 8 {
 		var saved, toolResult string
 		var answer gameModelMessage
@@ -399,7 +424,7 @@ func (a *app) runGameTurn(cid int64, g gameActor, t gameTurn) error {
 				return err
 			}
 		} else if err == sql.ErrNoRows {
-			answer, err = a.gameModel(ctx, s, messages, gameTools())
+			answer, err = a.gameModelStreaming(ctx, s, messages, gameTools(), field, publish)
 			if err != nil {
 				return err
 			}

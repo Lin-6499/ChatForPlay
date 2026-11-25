@@ -2,6 +2,7 @@
 import { computed, nextTick, onActivated, onDeactivated, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Icon from './Icon.vue'
 import DiceRoll from './DiceRoll.vue'
+import HostStream from './HostStream.vue'
 import AbilityChecks from './AbilityChecks.vue'
 import { phases, rulesets, modes, abilityNames, type Campaign, type Character, type GameEvent, type Turn, type Proposal, type AgentToken, type AISettings, type GameAPI, type GameUser, type DiceInput, type DiceReceipt } from './game-types'
 import './entertainment.css'
@@ -361,6 +362,7 @@ onBeforeUnmount(() => { stopped = true; requestGeneration++; clearInterval(timer
             <p v-else class="game-entry-text">{{ e.content }}</p>
             <button v-if="e.kind === 'check'" class="text-button" @click="chooseTab('checks')">查看检定与代价选择</button>
           </article>
+          <HostStream :key="current.id" :campaign-i-d="current.id" :api="api" :completed="events.filter(e => e.kind === 'narration' || e.kind === 'summary').map(e => e.payload.turn_id || 0)" />
         </div>
         <footer class="game-composer">
           <div v-if="replyError" class="game-reply-status" role="status">{{ replyError }}<button class="text-button" @click="loadReplyPrompt(current.id, requestGeneration)">重试</button></div>

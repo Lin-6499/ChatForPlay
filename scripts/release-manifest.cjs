@@ -24,7 +24,7 @@ const files = [
     artifacts.push({ path: file, bytes: fs.statSync(full).size, sha256: h.digest('hex') })
   }
   const manifest = { version, created: new Date().toISOString(), cloud: 'https://chat.linblog.site', artifacts,
-    verification: ['dist/verification/quick-replies/results.json', 'dist/verification/window-state/results.json', 'dist/verification/window-state/build-binding.json', 'dist/verification/dice/results.json', 'dist/verification/window-position/results.json', 'dist/verification/reading-position/results.json', 'dist/verification/ability-checks/results.json', 'dist/verification/entertainment-check-results.json'],
+    verification: ['dist/verification/streaming/results.json', 'dist/verification/streaming/build-binding.json', 'dist/verification/quick-replies/results.json', 'dist/verification/entertainment-check-results.json'],
     verificationScope: 'Headless web/preload checks and hidden Electron geometry lifecycle; native maximize presentation intercepted. No visible client or installer launched.' }
   fs.writeFileSync(path.join(root, 'dist', 'release-manifest.json'), JSON.stringify(manifest, null, 2))
   const installer = artifacts[0]

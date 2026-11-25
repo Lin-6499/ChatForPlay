@@ -7,6 +7,13 @@ related_targets: ["web/src/entertainment.css","web/src/game-types.ts","web/src/D
 
 # Entertainment mode — existing LinChat surface
 
+## Host streaming · 2026-11-25
+
+- Extend the established journal, with one temporary host entry marked “正在生成 · 尚未入档”; use inherited surface warning/muted tokens, a full border, 16px padding and 9px radius. No typewriter effect or token announcements.
+- Preserve the existing journal anchor/follow behavior. Final narration replaces the temporary entry; errors and expired leases cannot masquerade as saved outcomes.
+- Verified with isolated, deliberately held-open SSE providers for builtin and external hosts: preview before completion, reload recovery, exactly one final entry. Six rendered captures cover both hosts at 1264, 390 and 320px.
+- In-thread visual review initially found unpadded draft borders; corrected padding and canvas-local semantic colors, rebuilt and recaptured. Final narrow-screen review: ship. Composer and content remain reachable; detector reports no findings.
+
 Mode: Operate. Extend the shared LinChat Electron/Vue interface for friends running text campaigns. Confirmed: explicit player actions or @主持人 trigger AI; ordinary chat stays conversational; support built-in Grok/OpenAI-compatible APIs and campaign-scoped external-agent tokens. Visual authority is now `DESIGN.md` and the user-approved appearance redesign in `web-src-app-vue.md`.
 
 ## Direction contract

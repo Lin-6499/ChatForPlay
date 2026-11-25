@@ -221,3 +221,7 @@ npm run test:desktop
 `test:entertainment` 使用隔离测试数据库和本机模型替身，验证桌面／移动界面、角色、骰子、私信、提案、令牌、模型配置与完整工具调用流程。
 
 `test:dice` 自动启动并清理独立的本机预览和测试数据，使用无头浏览器验证服务器点数、优势／劣势、幂等重试、慢网关闭、私密权限、窄屏布局与减少动态效果。需要先准备 `dist/server/linchat-windows-amd64.exe`；也可通过 `LINCHAT_TEST_SERVER` 指向单独构建的验收服务端。结果位于 `dist/verification/dice/results.json`。
+# 主持流式输出（1.2.7）
+
+内置主持与新版外部主持示例支持真实流式公开正文；旧接口调用者需接入新的 stream 接口。
+临时正文只用于预览，最终仍由 complete 确认。完整协议见 [HOST_STREAMING.md](HOST_STREAMING.md)。
