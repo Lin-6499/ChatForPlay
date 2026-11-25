@@ -1,6 +1,6 @@
 {
   "name": "linchat-desktop",
-  "version": "1.2.2",
+  "version": "1.2.5",
   "description": "LinChat — 云端与 Radmin 虚拟局域网兼容的多人实时通讯",
   "author": "LinChat",
   "private": true,
@@ -17,7 +17,9 @@
     "test:auto-update": "node scripts/auto-update-check.cjs",
     "test:features": "node --test scripts/mentions.test.cjs scripts/updates.test.cjs scripts/campaign.test.cjs",
     "test:entertainment": "node scripts/entertainment-check.cjs",
+    "test:dice": "node scripts/dice-check.cjs",
     "test:appearance": "node --test scripts/theme.test.cjs",
+    "test:window-state": "node --test scripts/window-state.test.cjs && node scripts/window-state-check.cjs",
     "campaign:mcp": "node scripts/campaign-mcp.cjs",
     "campaign:agent": "node scripts/campaign-agent.cjs",
     "release:manifest": "node scripts/release-manifest.cjs",

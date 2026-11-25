@@ -8,6 +8,44 @@
 - 云端目标：腾讯云 `43.138.138.136`，`chat.linblog.site`
 - Radmin 本机网卡：`26.232.226.141`
 
+## 长期 SSH 部署入口（2026-11-25 已建立并验证）
+
+- 用户已要求建立长期 SSH 授权，后续部署使用专用连接：`ssh linchat-cloud "<远程命令>"`，文件传输使用 `scp <文件> linchat-cloud:<目标路径>`。
+- 目标：`ubuntu@43.138.138.136:22`。别名保存在本机 `%USERPROFILE%\.ssh\config`，只针对 `linchat-cloud` 生效；采用非交互公钥认证和已有的服务器主机密钥校验。
+- 专用 Ed25519 私钥：`%USERPROFILE%\.ssh\linchat_deploy_ed25519`；公钥：同名 `.pub`。私钥只在这台电脑保存，文件 ACL 仅授权当前用户和 SYSTEM，不进入工程或交付附件。
+- 公钥标识：`linchat-deploy-desktop-20261125`；指纹：`SHA256:SSKPNskzcPJhS2FuLhDp4Xs7xh4TI+IyGNK8021yffg`。
+- 本机已验证密钥对一致、OpenSSH 配置解析正确。服务器 `/home/ubuntu/.ssh/authorized_keys` 已登记以下公钥行，确认只有一条对应授权；`.ssh`／`authorized_keys` 权限为 `0700`／`0600`，均属于 `ubuntu`：
+
+```text
+restrict ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOCS3QJFFpJqzsFFC+RfVcbfQdTUt+meiSiHA0XyBVZR linchat-deploy-desktop-20261125
+```
+
+- 此授权按用户要求长期保留，不设置自动失效或部署后删除；只有用户要求撤销时才移除对应公钥和本机专用密钥。以后部署清理仅针对暂存文件。
+- 已通过真实非交互 SSH 登录、`sudo -n`、独立 SCP 上传／下载及 SHA-256 往返一致性检查。验证时 `linchat.service` 为 `active`，健康接口正常；测试暂存目录已删除，长期授权及本机密钥保留。
+- 验证证据：`dist/verification/ssh-persistent/access-results.json`、`transfer-results.json`；交付副本位于 `E:\LinChat\dist\verification\ssh-persistent-20261125\`。证据不包含私钥。
+
+## 2026-11-25 骰型与正视角校正（云端已部署）
+
+- 根据用户截图校正骰子停稳视角：结果面正对镜头、正交等比投影，移除残余俯仰／偏航。D20 正面保持等边三角形与左右对称轮廓；D10／D100 的风筝面尖端朝上，点数移至内心，调整各骰型及长数字字号以避免压住边线。
+- 已更新 `https://chat.linblog.site`，刷新聊天页面即可使用。线上 HTML、JS `index-B9OG44Nb.js` 和 CSS `index-BGfj_70s.css` 与本地已验收产物逐字节一致。
+- Linux 程序 SHA-256：`bb872cc3f8d13534ee6a87b63d2faa9e7f4b08c058acb94c962e4bda037dd75e`。服务端协议／健康版本仍为 `1.2.0`；本次更新由云端提供的界面生效。
+- 更新前完整备份：`/var/backups/linchat/update-20261125-140414-LzlDzh/`。19 张业务表原有记录均保留且无修改，包含 60 条聊天消息、23 条战役事件、4 个账号和4个登录会话；附件／模型密钥摘要一致，SQLite 完整性为 `ok`。
+- 类型检查与构建、8 项掷骰集成场景、几何对称／等边／连续收敛检查、深浅色标签边界检查、4 尺寸渲染及普通／减少动态效果捕获通过；机械检测无发现。上线后 6 项公网回归与3项资源／无头检查通过。
+- 全程后台／无头验收，未打开应用窗口。服务器暂存目录和隔离预览已清理，长期 SSH 授权保留。证据：`dist/verification/dice-shape/`、`dist/verification/cloud-dice-shape/`、`.impeccable/review/dice-shape/`；交付副本：`E:\LinChat\dist\verification\dice-shape-20261125\`。
+
+## 2026-11-25 掷骰动画（云端已部署）
+
+- 已在当前开发工作树实现骰盘、投掷／翻滚／落定动画与真实服务器结果揭晓，约 820ms；优势／劣势标记保留和舍弃，最多同时绘制六枚骰子，支持查看全部点数。
+- 沿用服务器随机数及幂等请求；客户端只负责呈现。慢网停止动画并等待结果，失败可复用原请求重试，Esc 可关闭等待中的弹窗。
+- 已覆盖默认深色、自定义浅色面板、320–1264px 布局及减少动态效果；等待提示使用各面板独立的语义琥珀色，实测对比度为 8.07:1／5.14:1。
+- 前端类型检查与构建、8 项骰子无头集成场景、13 项娱乐场景回归通过；机械设计检查无发现。动画录屏：`dist/verification/dice/dice-normal.webm` 与 `dice-reduced.webm`；静态与逐帧证据位于 `.impeccable/review/dice/`。
+- 动效复核修正了等待状态的语义色，最终结论为 `ship`，范围为提供的逐帧证据和深／浅色等待状态。交付副本位于 `E:\LinChat\dist\verification\dice-animation-20261125\`。
+- 已部署至 `https://chat.linblog.site`。当前已打开的聊天页按 `Ctrl + R` 刷新，即可从「娱乐模式 → 掷骰」使用新动画。
+- 部署程序 SHA-256：`8bd6c0157b9ad34b588a3f881d0aaffe462ebaf1273141fd79735fe2caa5be03`；构建前逐项确认源码与前端产物均符合已验收输入清单。服务端协议／健康版本仍为 `1.2.0`。
+- 更新前已完整备份旧程序与数据：`/var/backups/linchat/update-20261125-134135-ZTB1ZJ/`。19 张业务表原有记录逐项一致，包含 52 条消息、4 个账号、4 个登录会话、1 个战役、2 张角色卡；附件和模型密钥文件摘要一致，SQLite 完整性为 `ok`。
+- 线上 HTML、JS `index-CdDdGTAK.js` 与 CSS `index-B2TWY0MD.css` 和已验收构建逐字节一致。6 项公网检查与 3 项上线资源／无头检查通过。登录后的掷骰行为使用此前的隔离战役验收，公网验证未向正式战役写入测试记录。
+- 服务器暂存文件已清理，长期 SSH 授权及本机密钥保留。部署证据：`dist/verification/cloud-dice/`；交付副本：`E:\LinChat\dist\verification\cloud-dice-20261125\`。
+
 ## 2026-11-25 云端外观补部署（1.2.2 界面）
 
 - 已将包含深色界面、自定义配色及新版桌面更新提示的 1.2.2 发行服务端部署至 `https://chat.linblog.site`。聊天和娱乐模式页面现在由云端提供新版资源；已打开的旧页面需要刷新一次。
@@ -106,8 +144,8 @@ sudo bash update-cloud.sh ./linchat-linux-amd64 <SHA256SUMS.txt 中的 Linux 二
 - HTTPS：Let's Encrypt 证书，有效期至 2027-02-22。
 - 自动续期：现有 `certbot.timer`，增加仅针对 chat 域名的续期后 Nginx reload hook。
 - 初始化：管理员已创建；新成员通过管理员生成的邀请链接注册，已有账号直接登录。
-- 已部署 1.2.2 发行的深色界面与自定义配色资源；服务端健康接口保留协议版本 `1.2.0`。
-- Linux 二进制 SHA-256：`b48bab8af2f91841efe355ad933e440777ef65045dd3038192247b729571c82e`。
+- 已部署深色界面、自定义配色、掷骰动画及骰型／正视角校正；服务端健康接口保留协议版本 `1.2.0`。
+- Linux 二进制 SHA-256：`bb872cc3f8d13534ee6a87b63d2faa9e7f4b08c058acb94c962e4bda037dd75e`。
 
 ## 验证状态
 

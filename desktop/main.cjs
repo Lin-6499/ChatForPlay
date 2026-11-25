@@ -1,5 +1,6 @@
-const { app, BrowserWindow, Menu, Tray, ipcMain, shell, Notification, clipboard, nativeImage, session, dialog } = require('electron')
+const { app, BrowserWindow, Menu, Tray, ipcMain, shell, Notification, clipboard, nativeImage, session, dialog, screen } = require('electron')
 const { RELEASE_API, UPDATE_FEED, createUpdater } = require('./updates.cjs')
+const { createWindowState } = require('./window-state.cjs')
 const { spawn } = require('node:child_process')
 const fs = require('node:fs')
 const path = require('node:path')
@@ -15,7 +16,7 @@ const iconPath = path.join(__dirname, 'assets', 'icon.png')
 let win, tray, host, quitting = false, shutdownStarted = false, selectedOrigin = ''
 let hostState = { running: false, starting: false, url: '', setupURL: '', mode: '', error: '' }
 let profiles = []
-let updater, updateTimer, updateInterval, stoppingHost
+let updater, updateTimer, updateInterval, stoppingHost, windowState
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) app.quit()
 
@@ -108,7 +109,7 @@ function localNetwork(hostname) {
   const [a, b] = hostname.split('.').map(Number)
   return a === 26 || a === 10 || a === 127 || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31)
 }
-function showWindow() { if (win) { if (win.isMinimized()) win.restore(); win.show(); win.focus() } }
+function showWindow() { if (win) { windowState?.restore(); if (win.isMinimized()) win.restore(); win.show(); win.focus() } }
 async function openConnections() {
   selectedOrigin = ''
   await win.loadFile(launcherPath)
@@ -237,6 +238,7 @@ async function stopHost({ forUpdate = false } = {}) {
 
 app.on('second-instance', showWindow)
 app.on('before-quit', event => {
+  windowState?.save()
   clearTimeout(updateTimer); clearInterval(updateInterval)
   quitting = true
   if (host) {
@@ -260,13 +262,15 @@ app.whenReady().then(async () => {
   })
   partition.setPermissionCheckHandler((contents, permission, requestingOrigin) =>
     contents === win?.webContents && permission === 'notifications' && requestingOrigin === selectedOrigin)
+  windowState = createWindowState({ file: path.join(app.getPath('userData'), 'window-state.json'), screen })
   win = new BrowserWindow({
-    width: 1280, height: 850, minWidth: 820, minHeight: 600, show: false,
+    ...windowState.options, show: false,
     title: 'LinChat · 让交流近一点', backgroundColor: '#111615', icon: iconPath,
     autoHideMenuBar: true,
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false,
       sandbox: true, webSecurity: true, partition: 'persist:linchat', spellcheck: false },
   })
+  windowState.bind(win)
   win.on('close', event => { if (!quitting) { event.preventDefault(); win.hide() } })
   win.once('ready-to-show', showWindow)
   const installed = app.isPackaged && process.platform === 'win32' && !process.env.PORTABLE_EXECUTABLE_FILE &&
@@ -291,6 +295,7 @@ app.whenReady().then(async () => {
       throw failure
     },
     prepareInstall: async () => {
+      windowState.save()
       const resume = { version: updater.getState().latestVersion, created: Date.now(),
         hostMode: hostState.running || hostState.starting ? hostState.mode : '',
         localChat: !!selectedOrigin && selectedOrigin === hostState.url, origin: selectedOrigin }

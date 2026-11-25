@@ -1,0 +1,95 @@
+.modal.game-modal.dice-modal { width: min(100%, 540px); display: flex; flex-direction: column; overflow: hidden; }
+.dice-modal > .modal-header { flex-shrink: 0; margin-bottom: 20px; }
+.dice-roll { display: flex; flex-direction: column; min-height: 0; }
+.dice-scroll { overflow-y: auto; overscroll-behavior: contain; padding: 4px; margin: -4px; }
+.dice-tray { border: 1px solid var(--selected-line); border-radius: 10px; background: var(--field); padding: 14px 16px 0; }
+.dice-tray-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 11px; line-height: 1.6; }
+.dice-tray-heading > span:last-child { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
+.dice-private .dice-tray-heading > span:last-child { color: var(--warning); }
+.dice-table { display: flex; justify-content: center; align-items: center; gap: 18px; min-height: 158px; position: relative; }
+.dice-slot { width: 108px; min-width: 0; flex-shrink: 1; text-align: center; --toss-start: -22px; }
+.dice-slot:nth-child(even) { --toss-start: 22px; }
+.dice-object { width: 100%; position: relative; }
+.dice-solid { display: block; width: 100%; overflow: visible; }
+.dice-solid polygon { fill: color-mix(in srgb, var(--raised) var(--face-light), var(--selected-line)); stroke: var(--selected-line); stroke-width: 1; stroke-linejoin: round; }
+.dice-solid .dice-front { fill: var(--selected); stroke: var(--accent-text); }
+.dice-solid text { fill: var(--selected-text); font-family: inherit; font-size: 16px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.dice-solid .dice-value { font-size: 24px; font-weight: 650; }
+.dice-solid .dice-wide-value { font-size: 16px; }
+.dice-small-face text { font-size: 14px; }
+.dice-small-face .dice-value { font-size: 20px; }
+.dice-small-face .dice-wide-value { font-size: 14px; }
+.dice-solid .dice-long-value { font-size: 12px; }
+.dice-solid .dice-extra-long-value { font-size: 10px; }
+.dice-contact { display: block; position: absolute; bottom: 0; left: 24%; width: 52%; height: 5px; border-radius: 50%; background: var(--line); opacity: .7; }
+.dice-tray[data-phase=rolling] .dice-solid { animation: dice-toss 820ms linear; will-change: transform; }
+.dice-tray[data-phase=rolling] .dice-contact { animation: dice-contact 820ms linear; }
+.dice-kept { display: block; min-height: 18px; font-size: 10px; color: var(--muted); line-height: 1.8; }
+.dice-revealed .dice-kept { color: var(--accent-text); }
+.dice-discarded .dice-solid { opacity: .55; }
+.dice-discarded .dice-kept { color: var(--muted); text-decoration: line-through; }
+.dice-discarded .dice-front { stroke: var(--border); }
+.dice-table-many { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); justify-items: center; gap: 4px; padding: 12px 0; max-width: 280px; margin-inline: auto; }
+.dice-table-many .dice-slot { width: 100%; max-width: 78px; }
+.dice-extra { font-size: 11px; color: var(--muted); grid-column: 1 / -1; }
+.dice-outcome { border-top: 1px solid var(--line); display: flex; align-items: center; gap: 12px; min-height: 76px; padding: 12px 0; }
+.dice-outcome > div:first-child { min-width: 0; flex: 1; }
+.dice-outcome b { font-size: 13px; font-weight: 500; color: var(--text); }
+.dice-tray[data-phase=waiting] .dice-outcome b { color: var(--warning); }
+.dice-outcome p { font-size: 11px; line-height: 1.7; color: var(--muted); margin-top: 3px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.dice-total { display: flex; align-items: baseline; gap: 10px; }
+.dice-total small { font-size: 11px; color: var(--muted); }
+.dice-total strong { font-size: 34px; line-height: 1.15; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text); }
+.dice-revealed .dice-total strong { color: var(--accent-text); animation: dice-reveal 180ms ease-out; }
+.dice-revealed .dice-solid text { animation: dice-reveal 180ms ease-out; }
+.dice-fields { padding: 0; margin: 20px 0 0; border: 0; min-width: 0; gap: 14px; }
+.dice-fields .game-form-row { flex-wrap: nowrap; gap: 12px; }
+.dice-fields .game-form-row > label { min-width: 0; }
+.dice-fields:disabled input, .dice-fields:disabled select { color: var(--muted); }
+.dice-presets { display: flex; gap: 8px; flex-wrap: wrap; }
+.dice-presets .game-button { flex: 1; min-height: 34px; padding: 6px 10px; }
+.dice-presets .game-button[aria-pressed=true] { color: var(--selected-text); background: var(--selected); border-color: var(--selected-line); }
+.dice-fields .dice-invalid { color: var(--danger); }
+.dice-actions { display: flex; gap: 12px; flex-shrink: 0; padding-top: 18px; }
+.dice-actions > button { flex: 1; min-height: 44px; }
+.dice-actions > button[aria-disabled=true] { opacity: .55; cursor: wait; }
+.dice-error { border-radius: 7px; margin: 14px 0 0 !important; }
+.dice-error small { display: block; margin-top: 4px; font-size: 11px; }
+.dice-all-results { margin: 14px 0 0; font-size: 12px; color: var(--muted); line-height: 1.85; }
+.dice-all-results summary { cursor: pointer; color: var(--accent-text); }
+.dice-all-results p { overflow-wrap: anywhere; margin-top: 7px; font-variant-numeric: tabular-nums; }
+.dice-announcement { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@keyframes dice-reveal { from { opacity: .35; } to { opacity: 1; } }
+@keyframes dice-toss {
+  0% { transform: translate(0, 0); }
+  20% { transform: translate(calc(var(--toss-start) * .6), -27px); }
+  40% { transform: translate(calc(var(--toss-start) * .2), -22px); }
+  65% { transform: translate(0, 0); }
+  77% { transform: translate(0, -7px); }
+  90%, 100% { transform: translate(0, 0); }
+  95% { transform: translate(0, -1px); }
+}
+@keyframes dice-contact {
+  0%, 65%, 90%, 100% { transform: scaleX(1); opacity: .7; }
+  20% { transform: scaleX(.6); opacity: .35; }
+  77% { transform: scaleX(.85); opacity: .55; }
+}
+@media (max-width: 760px) {
+  .modal.game-modal.dice-modal { padding: 20px 18px; }
+  .dice-tray { padding: 12px 12px 0; }
+  .dice-table { gap: 8px; min-height: 142px; }
+  .dice-slot { width: 96px; }
+  .dice-table-many { gap: 4px; }
+  .dice-table-many .dice-slot { max-width: 74px; }
+  .dice-outcome { min-height: 70px; }
+  .dice-total { gap: 7px; }
+  .dice-total strong { font-size: 30px; }
+  .dice-fields { margin-top: 16px; gap: 12px; }
+}
+@media (max-height: 680px) {
+  .dice-table { min-height: 112px; }
+  .dice-slot { width: 82px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dice-revealed .dice-total strong, .dice-revealed .dice-solid text { animation: dice-reveal 100ms ease-out !important; }
+}

@@ -16,6 +16,7 @@
 - 文字、图片、文件，支持图片粘贴、拖放文件、上传进度和失败重试。
 - 服务端落盘确认、消息编号去重、历史分页、重连后增量同步。
 - Electron 连接中心、保存服务端地址、托盘常驻、系统通知。
+- 自动记忆桌面窗口大小、位置和最大化状态；更换显示器后将窗口恢复到可见区域。
 - Electron 内置 Go 服务端，可一键启动 Radmin 主机或仅本机体验。
 - 桌面新版后台下载与校验，点击“重启并更新”即可静默升级；支持连接中心、托盘和个人设置入口。
 - 娱乐模式：文字战役、角色卡、服务器掷骰、场景与摘要存档、私密资料和房主确认的设定提案。
@@ -28,9 +29,9 @@
 
 ### 安装并选择位置
 
-**[下载 LinChat 1.2.2 安装包](https://github.com/Lin-6499/ChatForPlay/releases/download/v1.2.2/LinChat-Setup-1.2.2.exe)**
+**[下载 LinChat 1.2.5 安装包](https://github.com/Lin-6499/ChatForPlay/releases/download/v1.2.5/LinChat-Setup-1.2.5.exe)**
 
-1. 下载 `LinChat-Setup-1.2.2.exe`。
+1. 下载 `LinChat-Setup-1.2.5.exe`。
 2. 双击运行，在安装向导中点击**浏览**或直接输入路径，例如 `D:\应用\LinChat`，再点击**安装**。安装后创建桌面、开始菜单快捷方式；最后一页可选择是否立即运行。
 3. 点击预置的 **“LinChat 云端”**，用自己的账号登录。新成员先使用管理员发来的邀请链接注册。
 
@@ -47,9 +48,9 @@
 开发者本地构建后的文件：
 
 ```text
-dist/desktop/1.2.2/LinChat-Setup-1.2.2.exe       可选择安装目录的安装版
-dist/desktop/1.2.2/LinChat-Portable-1.2.2.exe    便携版
-dist/desktop/1.2.2/latest.yml                  自动更新版本与 SHA-512 清单
+dist/desktop/1.2.5/LinChat-Setup-1.2.5.exe       可选择安装目录的安装版
+dist/desktop/1.2.5/LinChat-Portable-1.2.5.exe    便携版
+dist/desktop/1.2.5/latest.yml                  自动更新版本与 SHA-512 清单
 dist/server/linchat-windows-amd64.exe           独立 Windows 服务端
 dist/server/linchat-linux-amd64                 独立 Linux 服务端
 ```

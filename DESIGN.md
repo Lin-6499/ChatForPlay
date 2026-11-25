@@ -171,6 +171,16 @@ One shared DOM component serves Vue and Electron. It presents a conversation pre
 
 The web saves per browser origin in local storage. Electron also saves a validated device preference through its existing restricted IPC boundary, so the connection center and selected server share the palette. Escape closes web dialogs and restores trigger focus; native desktop dialogs use the platform dialog behavior.
 
+### Audited Dice
+
+`DiceRoll.vue` extends the existing campaign roll dialog with a bounded, theme-derived dice tray. Faceted SVG solids use real projected geometry, opaque tonal faces and a small ground contact; they introduce no raster assets or additional runtime dependencies. D4/D6/D8/D10/D12/D20 have distinct solids; other supported formulas retain an explicit side-count label.
+
+The resting camera is orthographic and face-on: no residual pitch/yaw or nonuniform scaling. D20 keeps an equilateral point face and a left/right-symmetric silhouette; the D10 kite's long tip is upright, with its value placed at the incenter. Face-aware label sizes keep the numeral inside the edges. D4/D6 therefore read as an exact triangle/square at rest, while the throw exposes their volume.
+
+One user-triggered 820ms throw is the focal moment: short lift, decelerating tumble, small contact bounce, then a 180ms point/total reveal. CSS flight and projected geometry share one animation clock. At most six solids animate, and all raw points remain inspectable. The final number and kept/discarded state come exclusively from the server receipt; no provisional point values, replays on historical entries, confetti or sound.
+
+Slow requests end motion in a labeled, unscored waiting state. Errors retain the request for idempotent retry. Escape remains available during a pending roll; the action footer stays visible while fields and large result lists scroll. Reduced motion skips flight/tumble and uses only a 100ms opacity reveal, without adding an artificial wait for the server result.
+
 ## Do's and Don'ts
 
 ### Do:
