@@ -8,6 +8,16 @@
 - 云端目标：腾讯云 `43.138.138.136`，`chat.linblog.site`
 - Radmin 本机网卡：`26.232.226.141`
 
+## 2026-11-25 云端外观补部署（1.2.2 界面）
+
+- 已将包含深色界面、自定义配色及新版桌面更新提示的 1.2.2 发行服务端部署至 `https://chat.linblog.site`。聊天和娱乐模式页面现在由云端提供新版资源；已打开的旧页面需要刷新一次。
+- 使用已发布且已验收的 Linux 程序，SHA-256：`b48bab8af2f91841efe355ad933e440777ef65045dd3038192247b729571c82e`。服务端协议／健康版本仍为 `1.2.0`，本次构建通过二进制和前端资源摘要确认。
+- 更新前停止服务并备份完整数据和旧程序：`/var/backups/linchat/update-20261125-125758-TIgx3W/`。
+- 19 张业务表原有记录逐项对比一致，包含 4 个账号（含 1 个服务账号）、5 个会话、12 条成员关系、50 条消息、4 个登录会话、1 个战役、2 张角色卡、11 条战役事件。附件与模型密钥文件摘要一致，SQLite 完整性为 `ok`。
+- 线上 JS `index-C_s321Yv.js` 与 CSS `index-CHkUr-1v.css` 和已验收构建逐字节一致。6 项公网检查与 4 项无头外观检查通过，包含默认深色、切换配色后刷新保留、390px 布局及无未捕获错误。
+- 全程后台／无头执行，未弹出或聚焦应用窗口。证据：`dist/verification/cloud-appearance/`，交付副本：`E:\LinChat\dist\verification\cloud-appearance-1.2.2\`。
+- 已撤销本次 `linchat-appearance-20261125` 临时授权，保留其他 SSH 授权；服务器暂存目录及本地临时密钥均已清理。
+
 ## 1.2.2 应用内自动更新与深色配色
 
 - 已发布：[LinChat 1.2.2](https://github.com/Lin-6499/ChatForPlay/releases/tag/v1.2.2)，发行源码提交 `0b32c32`。9 个附件的大小和 SHA-256 均经 GitHub 确认。
@@ -96,7 +106,8 @@ sudo bash update-cloud.sh ./linchat-linux-amd64 <SHA256SUMS.txt 中的 Linux 二
 - HTTPS：Let's Encrypt 证书，有效期至 2027-02-22。
 - 自动续期：现有 `certbot.timer`，增加仅针对 chat 域名的续期后 Nginx reload hook。
 - 初始化：管理员已创建；新成员通过管理员生成的邀请链接注册，已有账号直接登录。
-- Linux 二进制 SHA-256：`3b19fe5b998c0a701519ef0fce4bbfc55768a4dbb92b1b98d27318c8594851ff`。
+- 已部署 1.2.2 发行的深色界面与自定义配色资源；服务端健康接口保留协议版本 `1.2.0`。
+- Linux 二进制 SHA-256：`b48bab8af2f91841efe355ad933e440777ef65045dd3038192247b729571c82e`。
 
 ## 验证状态
 
