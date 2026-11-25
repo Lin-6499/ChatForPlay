@@ -10,8 +10,12 @@
 
 ## 1.2.0 娱乐模式
 
-- 发行入口：[LinChat 1.2.0](https://github.com/Lin-6499/ChatForPlay/releases/tag/v1.2.0)。Windows 安装包 `LinChat-Setup-1.2.0.exe`，107,112,424 字节，SHA-256：`bd5581e213cc76af4ed94c753d946274e94eba632faa0c697e923b99d2a3f547`。
+- 已发布：[LinChat 1.2.0](https://github.com/Lin-6499/ChatForPlay/releases/tag/v1.2.0)，发行源码提交 `9d64f18`。Windows 安装包 `LinChat-Setup-1.2.0.exe`，107,112,424 字节，SHA-256：`bd5581e213cc76af4ed94c753d946274e94eba632faa0c697e923b99d2a3f547`。
 - 安装版、便携版与 Windows/Linux 服务端已构建，内置服务端与最终测试二进制摘要一致。打包后的 EXE 已连接云端 HTTPS 并验证正式版更新接口。结果：`dist/verification/packaged-check-results.json`。
+- 7 个发行附件已上传；GitHub 返回的大小及 SHA-256 与本地一致。结果：`dist/github-release.json`。
+- 本机从 1.1.0 升级至 **1.2.0** 并已重新打开，安装位置 `C:\Users\Administrator\AppData\Local\Programs\linchat-desktop\LinChat.exe`。EXE、应用包、内置服务端均与最终构建一致；桌面和开始菜单快捷方式均正确。结果：`dist/verification/installer-results.json`。
+- 实际安装版通过独立验证配置连接云端 HTTPS 登录页，并成功请求正式 GitHub 更新接口。结果：`dist/verification/installed-check-results.json`。
+- 已使用 Windows PowerShell 5.1 从公开发行地址完整下载安装包，大小及 SHA-256 与固定清单一致；正式最新版响应会向 1.1.0 客户端提示更新，1.2.0 不会收到重复升级提示。结果：`dist/verification/download-results.json`、`published-update-check.json`。
 - 战役房间、固定规则版本、角色卡与资源、服务器掷骰、公开／私密日志、结束摘要、故事提案和暂停／继续已实现。
 - 支持手动主持、Grok／OpenAI 兼容内置主持、战役令牌与外部自动主持；HTTP 接口、Node.js 22+ 机器人示例和 stdio MCP 接入见 [娱乐模式文档](docs/ENTERTAINMENT.md)。
 - Go 集成测试及 `go vet`、7 项 JS 逻辑测试、13 项娱乐模式端到端场景、11 项原有 Electron 场景通过。内置与外部模型流程使用本机工具调用替身验证。
@@ -74,10 +78,10 @@ sudo bash update-cloud.sh ./linchat-linux-amd64 <SHA256SUMS.txt 中的 Linux 二
 - Electron 安装包输出：`dist/desktop/<版本>/`；1.0.1 起采用当前用户一键安装、安装后自动启动，并提供源码目录下的自动下载安装入口。
 - 公网 6 项检查通过：HTTPS 健康接口、Vue 静态资源与响应头、未登录隔离、跨来源写入拒绝、战役／秘密／模型配置鉴权、初始化令牌保护。结果：`dist/verification/cloud-check-results.json`。
 - 实际打包的 Windows EXE 已启动并成功连接云端 HTTPS 引导页，版本号和数据目录正确。结果：`dist/verification/packaged-check-results.json`。
-- 桌面版 1.1.0 已完成当前用户静默升级，安装后 EXE、应用包和内置服务端与构建产物一致；桌面及开始菜单快捷方式均指向已安装程序。结果：`dist/verification/installer-results.json`。
-- 已安装的 1.1.0 程序已连接云端 HTTPS 并显示登录页，使用独立验证配置目录，并验证真实 GitHub 更新检查。结果：`dist/verification/installed-check-results.json`。
+- 桌面版 1.2.0 已完成当前用户静默升级，安装后 EXE、应用包和内置服务端与构建产物一致；桌面及开始菜单快捷方式均指向已安装程序。结果：`dist/verification/installer-results.json`。
+- 已安装的 1.2.0 程序已连接云端 HTTPS 并显示登录页，使用独立验证配置目录，并验证真实 GitHub 更新检查。结果：`dist/verification/installed-check-results.json`。
 - 原站点回归：`https://ht.linblog.site/` 返回 200；`https://files.linblog.site/` 根路径部署前后均返回 404。
-- 交付后已从 `ubuntu` 的 `authorized_keys` 移除本次 `linchat-deploy-session` 临时公钥；其余 SSH 授权保留。
+- 交付后已从 `ubuntu` 的 `authorized_keys` 移除本次 `linchat-120-deploy-session` 临时公钥；其余 SSH 授权保留。
 
 ## 桌面一键安装发行（1.0.1 历史记录）
 
