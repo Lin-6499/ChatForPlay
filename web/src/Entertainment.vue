@@ -5,6 +5,7 @@ import AbilityChecks from './AbilityChecks.vue'
 import { phases, rulesets, modes, abilityNames, type Campaign, type Character, type GameEvent, type Turn, type Proposal, type AgentToken, type AISettings, type GameAPI, type GameUser } from './game-types'
 import './entertainment.css'
 import { getScrollPosition } from '../../desktop/scroll-memory.mjs'
+import type { ReplyOption, ReplyPromptView } from './game-types'
 
 const props = defineProps<{ me: GameUser; people: GameUser[]; api: GameAPI; revision: number }>()
 const emit = defineEmits<{ notify: [text: string]; chat: [conversationID: number] }>()
@@ -15,6 +16,30 @@ const proposals = ref<Proposal[]>([]), tokens = ref<AgentToken[]>([]), ai = ref<
 const tab = ref('journal'), mobileOpen = ref(false), error = ref(''), busy = ref(false), draft = ref(''), composeKind = ref('action'), recipient = ref(0)
 const journal = ref<HTMLElement>(), composing = ref(false), canOlder = ref(true)
 const journalReady = ref(false)
+const replyPrompt = ref<ReplyPromptView | null>(null), replyError = ref('')
+type SelectedReply = { eventID: number; optionID: string; content: string }
+const selectedReply = ref<SelectedReply | null>(null), quickReplyLines = ref(''), replyTarget = ref(0)
+const replyOptions = computed(() => quickReplyLines.value.split('\n').map(s => s.trim()).filter(Boolean))
+async function loadReplyPrompt(cid: number, generation: number) {
+  try {
+    const result = await props.api<{ prompt: ReplyPromptView | null }>(endpoint('reply-prompt', cid))
+    if (generation === requestGeneration && current.value?.id === cid) { replyPrompt.value = result.prompt; replyError.value = '' }
+  } catch {
+    if (generation === requestGeneration) { replyPrompt.value = null; replyError.value = '快捷回复加载失败，请重试' }
+  }
+}
+function chooseReply(option: ReplyOption) {
+  if (!replyPrompt.value?.can_reply || busy.value) return
+  selectedReply.value = { eventID: replyPrompt.value.event_id, optionID: option.id, content: option.content }
+  composeKind.value = 'action'; draft.value = option.content
+}
+function bindReplyDraft() {
+  if (composeKind.value !== 'action') return
+  if (!draft.value.trim()) { selectedReply.value = null; return }
+  if (!selectedReply.value && replyPrompt.value?.can_reply) {
+    selectedReply.value = { eventID: replyPrompt.value.event_id, optionID: '', content: '' }
+  }
+}
 const scrollKey = (part: string, cid = current.value?.id || 0) => `${props.me.id}/campaign/${cid}/${part}`
 const savedView = (key: string) => { try { return localStorage.getItem(`linchat-game-view:${props.me.id}:${key}`) || '' } catch { return '' } }
 const saveView = (key: string, value: string) => { try { localStorage.setItem(`linchat-game-view:${props.me.id}:${key}`, value) } catch {} }
@@ -38,7 +63,7 @@ const tokenForm = ref({ label: '', secrets: false }), issuedToken = ref<{ token:
 const aiForm = ref({ base_url: 'https://api.x.ai/v1', model: 'grok-4.7', api_key: '', enabled: true, remove_key: false })
 let requestGeneration = 0, stopped = false, active = true, timer: ReturnType<typeof setInterval>, refreshTimer: ReturnType<typeof setTimeout> | undefined
 const operationIDs = new Map<string, string>()
-const drafts = new Map<number, { content: string; kind: string; recipient: number }>()
+const drafts = new Map<number, { content: string; kind: string; recipient: number; selected: SelectedReply | null; options: string; target: number }>()
 const uid = () => Array.from(crypto.getRandomValues(new Uint8Array(18)), n => n.toString(16).padStart(2, '0')).join('')
 const endpoint = (suffix: string, id = current.value?.id) => `/v1/campaigns/${id}/${suffix}`
 const message = (e: unknown) => e instanceof Error ? e.message : '暂时无法连接，请稍后重试'
@@ -78,6 +103,7 @@ async function refresh() {
       current.value = state; characters.value = chars; turns.value = queue
       const map = new Map(events.value.map(e => [e.id, e])); for (const e of log) map.set(e.id, e)
       events.value = [...map.values()].sort((a, b) => a.id - b.id)
+      await loadReplyPrompt(cid, generation)
     }
   } catch (e) {
     if (generation === requestGeneration) {
@@ -90,7 +116,7 @@ async function refresh() {
 async function select(c: Campaign, afterCreate = false) {
   if (busy.value && !afterCreate) return
   if (current.value?.id === c.id && journalReady.value) { mobileOpen.value = true; return }
-  if (current.value) drafts.set(current.value.id, { content: draft.value, kind: composeKind.value, recipient: recipient.value })
+  if (current.value) drafts.set(current.value.id, { content: draft.value, kind: composeKind.value, recipient: recipient.value, selected: selectedReply.value, options: quickReplyLines.value, target: replyTarget.value })
   const generation = ++requestGeneration
   const previousTab = savedView(`tab:${c.id}`)
   const position = getScrollPosition(scrollKey('journal', c.id))
@@ -99,6 +125,8 @@ async function select(c: Campaign, afterCreate = false) {
   history.replaceState(null, '', `#campaign=${c.id}`)
   current.value = c; events.value = []; characters.value = []; turns.value = []; proposals.value = []; tokens.value = []; issuedToken.value = null
   const saved = drafts.get(c.id)
+  replyPrompt.value = null; replyError.value = ''; selectedReply.value = saved?.selected || null
+  quickReplyLines.value = saved?.options || ''; replyTarget.value = saved?.target || 0
   members.value = []; mobileOpen.value = true; tab.value = 'journal'
   composeKind.value = saved?.kind || 'action'; recipient.value = saved?.recipient ?? (c.owner_id === props.me.id ? 0 : c.owner_id)
   draft.value = saved?.content || ''; error.value = ''; canOlder.value = true
@@ -124,6 +152,8 @@ async function select(c: Campaign, afterCreate = false) {
     members.value = users.members.filter(m => m.id !== c.bot_id); canOlder.value = hasOlder
     if (!validRecipient.value) recipient.value = privateRecipients.value[0]?.id || 0
     journalReady.value = true
+    await loadReplyPrompt(c.id, generation)
+    if (generation !== requestGeneration) return
     if (previousTab && tabs.value.some(t => t.id === previousTab)) await chooseTab(previousTab)
   } catch (e) { if (generation === requestGeneration) { error.value = message(e); journalReady.value = true } }
 }
@@ -161,9 +191,27 @@ async function create() {
 async function submit() {
   if (!current.value || !draft.value.trim() || composing.value || (composeKind.value === 'private' && !validRecipient.value)) return
   await run(async () => {
-    if (composeKind.value === 'action') await write('actions', { content: draft.value.trim() })
-    else await write('messages', { version: current.value!.version, content: draft.value.trim(), visibility: composeKind.value === 'private' ? 'private' : 'public', recipient_id: composeKind.value === 'private' ? recipient.value : 0, kind: composeKind.value === 'summary' ? 'summary' : 'narration' })
-    draft.value = ''; drafts.delete(current.value!.id); await refresh(); await scrollBottom()
+    if (composeKind.value === 'action') {
+      if (selectedReply.value && (selectedReply.value.eventID !== replyPrompt.value?.event_id || !replyPrompt.value?.can_reply)) {
+        throw new Error('这组快捷回复已失效，请重新选择，或取消快捷选择后自行回复。')
+      }
+      const selected = selectedReply.value
+      const replyTo = selected?.eventID || (replyPrompt.value?.can_reply ? replyPrompt.value.event_id : 0)
+      await write('actions', {
+        ...(replyTo ? { reply_to_event_id: replyTo } : {}),
+        ...(selected && draft.value === selected.content ? { option_id: selected.optionID } : { content: draft.value.trim() }),
+      })
+    } else {
+      if (composeKind.value === 'narration' && (replyOptions.value.length > 6 || replyOptions.value.some(s => [...s].length > 40))) {
+        throw new Error('快捷回复最多 6 条，每条按钮文字不超过 40 字。')
+      }
+      await write('messages', { version: current.value!.version, content: draft.value.trim(), visibility: composeKind.value === 'private' ? 'private' : 'public', recipient_id: composeKind.value === 'private' ? recipient.value : 0, kind: composeKind.value === 'summary' ? 'summary' : 'narration',
+        ...(composeKind.value === 'narration' && replyOptions.value.length ? { reply_prompt: {
+          target_user_id: replyTarget.value, options: replyOptions.value.map((content, i) => ({ id: `choice_${i + 1}`, label: content, content })),
+        } } : {}),
+      })
+    }
+    draft.value = ''; selectedReply.value = null; quickReplyLines.value = ''; drafts.delete(current.value!.id); await refresh(); await scrollBottom()
   })
 }
 async function togglePause() {
@@ -296,8 +344,23 @@ onBeforeUnmount(() => { stopped = true; requestGeneration++; clearInterval(timer
           </article>
         </div>
         <footer class="game-composer">
+          <div v-if="replyError" class="game-reply-status" role="status">{{ replyError }}<button class="text-button" @click="loadReplyPrompt(current.id, requestGeneration)">重试</button></div>
+          <section v-else-if="replyPrompt && composeKind === 'action'" class="game-quick-replies" aria-label="主持人快捷回复">
+            <b>{{ replyPrompt.answered ? '你已回复这组问题' : replyPrompt.can_reply ? '主持人等你回复' : replyPrompt.target_user_id && replyPrompt.target_user_id !== me.id ? '等待指定玩家回复' : '等待主持人继续' }}</b>
+            <div v-if="replyPrompt.can_reply" class="game-reply-options">
+              <button v-for="option in replyPrompt.options" :key="option.id" type="button" class="game-button" :disabled="busy" :aria-pressed="selectedReply?.eventID === replyPrompt.event_id && selectedReply?.optionID === option.id && draft === option.content" @click="chooseReply(option)">{{ option.label }}</button>
+            </div>
+            <p v-if="replyPrompt.can_reply">点击选项填入下方，也可以修改或自行输入，再提交行动。</p>
+          </section>
+          <div v-if="selectedReply && composeKind === 'action'" class="game-reply-status"><span>{{ selectedReply.eventID === replyPrompt?.event_id ? '回复已关联主持人的问题' : '原问题已更新，请重新选择' }}</span><button class="text-button" @click="selectedReply = null">{{ selectedReply.optionID ? '取消快捷选择' : '重新确认问题' }}</button></div>
           <div class="game-compose-controls"><label class="game-select-label">发送为<select v-model="composeKind" aria-label="战役消息类型"><option value="action">玩家行动</option><option value="private">私密消息</option><template v-if="isOwner"><option value="narration">主持叙述</option><option value="summary">结束并保存摘要</option></template></select></label><label v-if="composeKind === 'private'" class="game-select-label">给<select v-model.number="recipient" aria-label="私密消息接收者"><option :value="0" disabled>{{ privateRecipients.length ? '选择接收者' : '暂无其他成员' }}</option><option v-for="p in privateRecipients" :key="p.id" :value="p.id">{{ p.nickname }}</option></select></label><button class="text-button" :disabled="current.phase === 'paused' || busy" @click="showDice = true; error = ''"><Icon name="dice" :size="17" />掷骰</button></div>
-          <textarea v-model="draft" class="game-action-input" rows="2" maxlength="8000" aria-label="行动或叙述内容" :placeholder="composeKind === 'action' ? '描述你的行动，例如：我举起火把，查看石门上的刻痕…' : composeKind === 'private' ? '只有接收者、发送者和房主能看到这条消息…' : '写下公开叙述或本次已经发生的事实…'" @compositionstart="composing = true" @compositionend="composing = false" @keydown.enter.ctrl.prevent="!composing && submit()"></textarea>
+          <details v-if="isOwner && composeKind === 'narration'" class="game-reply-editor">
+            <summary>添加快捷回复（可选）</summary>
+            <label>回复者<select v-model.number="replyTarget" aria-label="快捷回复的回复者"><option :value="0">所有成员，各自回复</option><option v-for="p in members" :key="p.id" :value="p.id">{{ p.nickname }}</option></select></label>
+            <label>快捷回复选项<textarea v-model="quickReplyLines" rows="3" maxlength="300" aria-label="快捷回复选项" placeholder="每行一条，最多 6 条，每条最多 40 字&#10;接下委托&#10;先询问报酬&#10;暂时离开"></textarea></label>
+            <p class="game-helper">随这条公开叙述发布。玩家始终可以自定义回复；新叙述会替换上一组选择。</p>
+          </details>
+          <textarea v-model="draft" class="game-action-input" rows="2" :maxlength="composeKind === 'action' ? 4000 : 8000" aria-label="行动或叙述内容" :placeholder="composeKind === 'action' ? '描述你的行动，例如：我举起火把，查看石门上的刻痕…' : composeKind === 'private' ? '只有接收者、发送者和房主能看到这条消息…' : '写下公开叙述或本次已经发生的事实…'" @input="bindReplyDraft" @compositionstart="composing = true" @compositionend="composing = false; bindReplyDraft()" @keydown.enter.ctrl.prevent="!composing && submit()"></textarea>
           <div class="game-compose-bottom"><span>{{ composeKind === 'action' ? current.auto_respond && current.mode !== 'manual' ? '提交后主持人将依次处理 · Ctrl + Enter 提交' : '行动写入日志，由房主继续主持' : composeKind === 'private' ? '私密消息不进入公开 AI 上下文' : '公开内容会同步到战役群聊' }}</span><button class="send-button" :disabled="busy || composing || !draft.trim() || (composeKind === 'action' && current.phase === 'paused') || (composeKind === 'private' && !validRecipient)" @click="submit">{{ composeKind === 'action' ? '提交行动' : composeKind === 'summary' ? '保存摘要' : '发送' }}<Icon name="send" :size="16" /></button></div>
         </footer>
       </template>

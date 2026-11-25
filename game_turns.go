@@ -158,11 +158,12 @@ type gameCharacterChange struct {
 	Resources  *string `json:"resources,omitempty"`
 }
 type gameOutcome struct {
-	Narration string                `json:"narration"`
-	Scene     *string               `json:"scene,omitempty"`
-	Phase     string                `json:"phase"`
-	Summary   string                `json:"summary,omitempty"`
-	Changes   []gameCharacterChange `json:"changes"`
+	ReplyPrompt *gameReplyPrompt      `json:"reply_prompt,omitempty"`
+	Narration   string                `json:"narration"`
+	Scene       *string               `json:"scene,omitempty"`
+	Phase       string                `json:"phase"`
+	Summary     string                `json:"summary,omitempty"`
+	Changes     []gameCharacterChange `json:"changes"`
 }
 type gameCompleteInput struct {
 	gameOp
@@ -268,7 +269,17 @@ func (a *app) completeGame(cid, turnID int64, g gameActor, in gameCompleteInput)
 		if o.Scene != nil {
 			c.Scene = *o.Scene
 		}
-		id, err := gameEvent(tx, c, c.BotID, eventKind, "public", 0, content, map[string]any{"turn_id": turnID, "changes": o.Changes})
+		if o.ReplyPrompt != nil && (eventKind != "narration" || o.Phase != "awaiting_action") {
+			return nil, gameFail(400, "快捷回复只适用于等待玩家行动的公开叙述")
+		}
+		if err := validateReplyPrompt(tx, c, o.ReplyPrompt); err != nil {
+			return nil, err
+		}
+		payload := map[string]any{"turn_id": turnID, "changes": o.Changes}
+		if o.ReplyPrompt != nil {
+			payload["reply_prompt"] = o.ReplyPrompt
+		}
+		id, err := gameEvent(tx, c, c.BotID, eventKind, "public", 0, content, payload)
 		if err != nil {
 			return nil, err
 		}

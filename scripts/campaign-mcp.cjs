@@ -11,13 +11,27 @@ const checkProperties = {
   outcomes: { type: 'object', properties: Object.fromEntries(grades.map(grade => [grade, effect])), required: grades, additionalProperties: false }, offer: effect,
 }
 const checkRequired = ['character_id', 'kind', 'ability', 'reason', 'dc', 'cost', 'outcomes']
+const replyPrompt = {
+  type: 'object', properties: {
+    target_user_id: { type: 'integer', minimum: 0, description: 'Player user ID; 0 lets each member reply independently.' },
+    options: { type: 'array', minItems: 1, maxItems: 6, items: {
+      type: 'object', properties: {
+        id: { type: 'string', pattern: '^[A-Za-z0-9_-]{1,40}$' },
+        label: { type: 'string', minLength: 1, maxLength: 40 },
+        content: { type: 'string', minLength: 1, maxLength: 4000 },
+      }, required: ['id', 'label', 'content'], additionalProperties: false,
+    } },
+  }, required: ['target_user_id', 'options'], additionalProperties: false,
+}
 const outcome = {
   type: 'object', properties: {
     narration: string, phase: { type: 'string', enum: ['awaiting_action', 'awaiting_roll'] }, scene: string, summary: string,
+    reply_prompt: replyPrompt,
     changes: { type: 'array', items: { type: 'object', properties: { id: integer, hp: integer, conditions: string, inventory: string, resources: string }, required: ['id'], additionalProperties: false } },
   }, required: ['narration', 'phase', 'changes'], additionalProperties: false,
 }
 const tools = [
+  ['campaign_reply_prompt', 'Read the latest public reply choices. Players can always write their own reply; a host token cannot answer for them.', 'GET', '/reply-prompt', {}],
   ['campaign_checks', 'Read locked ability/skill checks and server-computed results. Awaiting choices belong only to the character owner.', 'GET', '/checks', {}],
   ['campaign_check_get', 'Read one check by ID.', 'GET', a => `/checks/${a.check_id}`, { check_id: integer }, ['check_id']],
   ['campaign_prepare_check', 'Lock d20-graded-v1 house-rule ability/skill check before rolling. Bind action actor to character user_id. Declare DC, cost and all six outcomes; offer is an optional player-selected success cost. Not for attacks/saves/damage/death saves.', 'POST', '/checks', { ...operation, ...checkProperties, event_id: integer, version: integer, turn_id: integer, lease: string }, ['client_id', 'event_id', ...checkRequired]],
@@ -32,7 +46,7 @@ const tools = [
   ['campaign_roll', 'Ask the server to roll audited dice. Never invent results. A running turn requires turn_id and lease.', 'POST', '/rolls', { ...operation, formula: string, reason: string, visibility: { type: 'string', enum: ['public', 'dm'] }, turn_id: integer, lease: string }, ['client_id', 'formula', 'reason']],
   ['campaign_complete', 'Atomically publish narration and current resource changes, then release the claimed turn. Historical/background/rule changes must be proposals.', 'POST', a => `/turns/${a.turn_id}/complete`, { ...operation, turn_id: integer, version: integer, lease: string, outcome }, ['client_id', 'turn_id', 'version', 'lease', 'outcome']],
   ['campaign_fail', 'Release a claimed turn as failed so the owner can retry or take over. Saved dice are retained.', 'POST', a => `/turns/${a.turn_id}/fail`, { ...operation, turn_id: integer, lease: string }, ['client_id', 'turn_id', 'lease']],
-  ['campaign_message', 'Publish a public narration at a current version, or send an explicitly authorized private message. Public narration is refused while a turn runs.', 'POST', '/messages', { ...operation, version: integer, content: string, visibility: { type: 'string', enum: ['public', 'private'] }, recipient_id: integer, kind: { type: 'string', enum: ['narration', 'summary'] } }, ['client_id', 'content', 'visibility']],
+  ['campaign_message', 'Publish a public narration at a current version, or send an explicitly authorized private message. Optional reply_prompt provides suggested replies in awaiting_action; never answer for a player. Public narration is refused while a turn runs.', 'POST', '/messages', { ...operation, version: integer, content: string, visibility: { type: 'string', enum: ['public', 'private'] }, recipient_id: integer, kind: { type: 'string', enum: ['narration', 'summary'] }, reply_prompt: replyPrompt }, ['client_id', 'content', 'visibility']],
   ['campaign_propose', 'Submit an unpublished story/rule/background draft for the campaign owner to decide. Submitting does not change canon.', 'POST', '/story-proposals', { ...operation, kind: { type: 'string', enum: ['scene', 'house_rules', 'background'] }, content: string, character_id: integer }, ['client_id', 'kind', 'content']],
   ['campaign_update_state', 'Update current public scene or phase with optimistic version checking. Does not edit history, rules or private data.', 'PATCH', '/state', { ...operation, version: integer, scene: string, phase: { type: 'string', enum: ['paused', 'awaiting_action', 'awaiting_roll'] } }, ['client_id', 'version']],
 ]

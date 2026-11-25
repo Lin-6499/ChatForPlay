@@ -236,3 +236,15 @@
   .game-journal-empty { padding: 28px 8px; }
   .game-journal-empty p { font-size: 12px; }
 }
+.game-composer { max-height: 58%; overflow-y: auto; }
+.game-quick-replies { display: grid; gap: 8px; padding-bottom: 12px; }
+.game-quick-replies > b { font-size: 13px; }
+.game-quick-replies > p, .game-reply-status { font-size: 12px; line-height: 1.6; color: var(--muted); }
+.game-reply-options { display: flex; flex-wrap: wrap; gap: 8px; max-height: 112px; overflow-y: auto; }
+.game-reply-options .game-button { white-space: normal; text-align: left; overflow-wrap: anywhere; min-height: 36px; }
+.game-reply-options [aria-pressed=true] { background: var(--selected); color: var(--selected-text); border-color: var(--selected-line); }
+.game-reply-status { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+.game-reply-editor { margin-bottom: 12px; }
+.game-reply-editor summary { cursor: pointer; color: var(--muted); font-size: 12px; padding: 8px 0; }
+.game-reply-editor label { display: grid; gap: 8px; font-size: 12px; margin: 12px 0; }
+.game-reply-editor select, .game-reply-editor textarea { width: 100%; color: var(--text); background: var(--field); border: 1px solid var(--border); border-radius: 7px; padding: 8px; }

@@ -486,3 +486,6 @@ JSON 请求体上限 64 KiB，未知字段会被拒绝；下文标为可省略�
 - `scripts/campaign-mcp.cjs`：可选的 stdio MCP 工具封装。
 
 运行外部机器人示例还需配置模型服务的 `MODEL_BASE_URL`、`MODEL_ID`、`MODEL_API_KEY`。完整运行说明见同目录 `ENTERTAINMENT.md`。
+# 主持人快捷回复
+
+发布建议选项、查询待回复问题、玩家选择／自由输入及幂等规则见 [QUICK_REPLIES.md](QUICK_REPLIES.md)。入口为 `POST /messages` 的 `reply_prompt`、回合完成时的 `outcome.reply_prompt`、`GET /reply-prompt` 和 `POST /actions` 的 `reply_to_event_id`／`option_id`。

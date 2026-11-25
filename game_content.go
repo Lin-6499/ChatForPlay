@@ -292,25 +292,42 @@ func queueGameTurn(tx *sql.Tx, c campaign, eventID int64, kind string) (int64, e
 func (a *app) gameAction(r *http.Request, g gameActor) (any, error) {
 	var in struct {
 		gameOp
-		Content string `json:"content"`
+		Content        string `json:"content"`
+		ReplyToEventID int64  `json:"reply_to_event_id"`
+		OptionID       string `json:"option_id"`
 	}
 	if err := gameBody(r, &in); err != nil {
 		return nil, err
 	}
 	out, err := a.gameMutation(pathID(r, "id"), g, in.gameOp, "action", in, func(tx *sql.Tx, c campaign) (any, error) {
-		if g.AgentID != 0 {
+		if g.AgentID != 0 || g.actorKey == "builtin" {
 			return nil, gameFail(403, "智能体不能替玩家提交行动")
 		}
 		if c.Phase == "paused" {
 			return nil, gameFail(409, "战役已暂停，请房主继续后再提交行动")
 		}
-		if !textOK(in.Content, 1, 4000) {
-			return nil, gameFail(400, "行动内容为 1–4000 字")
-		}
-		content := strings.TrimSpace(in.Content)
-		id, err := gameEvent(tx, c, g.ID, "action", "public", 0, content, map[string]any{})
+		resolved, err := resolveGameReply(tx, c, g, in.ReplyToEventID, in.OptionID, in.Content)
 		if err != nil {
 			return nil, err
+		}
+		if !textOK(resolved, 1, 4000) {
+			return nil, gameFail(400, "行动内容为 1–4000 字")
+		}
+		content := strings.TrimSpace(resolved)
+		payload := map[string]any{}
+		if in.ReplyToEventID != 0 {
+			payload["reply_to_event_id"] = in.ReplyToEventID
+			payload["option_id"] = in.OptionID
+		}
+		id, err := gameEvent(tx, c, g.ID, "action", "public", 0, content, payload)
+		if err != nil {
+			return nil, err
+		}
+		if in.ReplyToEventID != 0 {
+			if _, err := tx.Exec("INSERT INTO campaign_replies(campaign_id,prompt_event_id,user_id,event_id) VALUES(?,?,?,?)",
+				c.ID, in.ReplyToEventID, g.ID, id); err != nil {
+				return nil, err
+			}
 		}
 		var turn int64
 		if c.AutoRespond && c.Mode != "manual" {
@@ -389,10 +406,11 @@ func (a *app) gameRoll(r *http.Request, g gameActor) (any, error) {
 func (a *app) gameMessage(r *http.Request, g gameActor) (any, error) {
 	var in struct {
 		gameOp
-		Content     string `json:"content"`
-		Visibility  string `json:"visibility"`
-		RecipientID int64  `json:"recipient_id"`
-		Kind        string `json:"kind"`
+		Content     string           `json:"content"`
+		Visibility  string           `json:"visibility"`
+		RecipientID int64            `json:"recipient_id"`
+		Kind        string           `json:"kind"`
+		ReplyPrompt *gameReplyPrompt `json:"reply_prompt,omitempty"`
 	}
 	if err := gameBody(r, &in); err != nil {
 		return nil, err
@@ -432,11 +450,21 @@ func (a *app) gameMessage(r *http.Request, g gameActor) (any, error) {
 		} else {
 			return nil, gameFail(400, "请选择公开或私密消息")
 		}
+		if in.ReplyPrompt != nil && (in.Visibility != "public" || in.Kind != "narration" || c.Phase != "awaiting_action") {
+			return nil, gameFail(400, "快捷回复只能附在等待玩家行动时的公开叙述中")
+		}
+		if err := validateReplyPrompt(tx, c, in.ReplyPrompt); err != nil {
+			return nil, err
+		}
 		actor := g.ID
 		if in.Visibility == "public" {
 			actor = c.BotID
 		}
-		id, err := gameEvent(tx, c, actor, in.Kind, in.Visibility, in.RecipientID, in.Content, map[string]any{})
+		payload := map[string]any{}
+		if in.ReplyPrompt != nil {
+			payload["reply_prompt"] = in.ReplyPrompt
+		}
+		id, err := gameEvent(tx, c, actor, in.Kind, in.Visibility, in.RecipientID, in.Content, payload)
 		if err != nil {
 			return nil, err
 		}
