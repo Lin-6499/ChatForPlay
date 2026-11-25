@@ -33,9 +33,9 @@
 
 ### 安装并选择位置
 
-**[下载 LinChat 1.2.7 安装包](https://github.com/Lin-6499/ChatForPlay/releases/download/v1.2.7/LinChat-Setup-1.2.7.exe)**
+**[下载 LinChat 1.2.9 安装包](https://github.com/Lin-6499/ChatForPlay/releases/download/v1.2.9/LinChat-Setup-1.2.9.exe)**
 
-1. 下载 `LinChat-Setup-1.2.7.exe`。
+1. 下载 `LinChat-Setup-1.2.9.exe`。
 2. 双击运行，在安装向导中点击**浏览**或直接输入路径，例如 `D:\应用\LinChat`，再点击**安装**。安装后创建桌面、开始菜单快捷方式；最后一页可选择是否立即运行。
 3. 点击预置的 **“LinChat 云端”**，用自己的账号登录。新成员先使用管理员发来的邀请链接注册。
 
@@ -52,9 +52,9 @@
 开发者本地构建后的文件：
 
 ```text
-dist/desktop/1.2.7/LinChat-Setup-1.2.7.exe       可选择安装目录的安装版
-dist/desktop/1.2.7/LinChat-Portable-1.2.7.exe    便携版
-dist/desktop/1.2.7/latest.yml                  自动更新版本与 SHA-512 清单
+dist/desktop/1.2.9/LinChat-Setup-1.2.9.exe       可选择安装目录的安装版
+dist/desktop/1.2.9/LinChat-Portable-1.2.9.exe    便携版
+dist/desktop/1.2.9/latest.yml                  自动更新版本与 SHA-512 清单
 dist/server/linchat-windows-amd64.exe           独立 Windows 服务端
 dist/server/linchat-linux-amd64                 独立 Linux 服务端
 ```

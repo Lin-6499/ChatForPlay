@@ -24,8 +24,8 @@ const files = [
     artifacts.push({ path: file, bytes: fs.statSync(full).size, sha256: h.digest('hex') })
   }
   const manifest = { version, created: new Date().toISOString(), cloud: 'https://chat.linblog.site', artifacts,
-    verification: ['dist/verification/window-position/results.json', 'dist/verification/reading-position/results.json', 'dist/verification/scroll-diagnosis/deployed.json'],
-    verificationScope: 'Headless scroll restoration regression, source/asset checks and read-only deployed asset comparison. No visible client or installer launched.' }
+    verification: ['dist/verification/realtime/results.json', 'dist/verification/streaming/results.json', 'dist/verification/streaming/build-binding.json', 'dist/verification/window-position/results.json', 'dist/verification/reading-position/results.json'],
+    verificationScope: 'Headless real-server realtime, reconnect and scroll restoration regressions; packaged source/server binding. No visible client or installer launched.' }
   fs.writeFileSync(path.join(root, 'dist', 'release-manifest.json'), JSON.stringify(manifest, null, 2))
   const installer = artifacts[0]
   const filename = path.basename(installer.path)
