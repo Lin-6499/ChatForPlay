@@ -20,9 +20,11 @@ async function refresh() {
   }
 }
 function changed(e: Event) { if ((e as CustomEvent).detail === props.campaignID) void refresh() }
+function reconnected() { void refresh() }
 onMounted(() => {
   void refresh()
   window.addEventListener('linchat:campaign-stream', changed)
+  window.addEventListener('linchat:reconnected', reconnected)
   document.addEventListener('visibilitychange', refresh)
   timer = setInterval(() => { now.value = Date.now(); void refresh() }, 3000)
 })
@@ -31,6 +33,7 @@ onDeactivated(() => { active = false; draft.value = null })
 onBeforeUnmount(() => {
   stopped = true; clearInterval(timer)
   window.removeEventListener('linchat:campaign-stream', changed)
+  window.removeEventListener('linchat:reconnected', reconnected)
   document.removeEventListener('visibilitychange', refresh)
 })
 </script>

@@ -64,6 +64,7 @@ const proposalForm = ref({ kind: 'scene', content: '', character_id: 0 })
 const tokenForm = ref({ label: '', secrets: false }), issuedToken = ref<{ token: string; base_url: string; expires_at: number } | null>(null)
 const aiForm = ref({ base_url: 'https://api.x.ai/v1', model: 'grok-4.7', api_key: '', enabled: true, remove_key: false })
 let requestGeneration = 0, stopped = false, active = true, timer: ReturnType<typeof setInterval>, refreshTimer: ReturnType<typeof setTimeout> | undefined
+let refreshPending = false
 const operationIDs = new Map<string, string>()
 const drafts = new Map<number, { content: string; kind: string; recipient: number; selected: SelectedReply | null; options: string; target: number }>()
 const uid = () => Array.from(crypto.getRandomValues(new Uint8Array(18)), n => n.toString(16).padStart(2, '0')).join('')
@@ -86,7 +87,9 @@ async function run(task: () => Promise<void>) {
   finally { busy.value = false }
 }
 async function refresh() {
-  if (refreshing.value || stopped || !active || (current.value && !journalReady.value)) return
+  if (stopped || !active) return
+  if (refreshing.value || (current.value && !journalReady.value)) { refreshPending = true; return }
+  refreshPending = false
   refreshing.value = true
   const generation = requestGeneration, cid = current.value?.id
   let listed = false
@@ -113,7 +116,10 @@ async function refresh() {
       if (!listed) listError.value = message(e)
     }
   }
-  finally { refreshing.value = false; loading.value = false }
+  finally {
+    refreshing.value = false; loading.value = false
+    if (refreshPending && active && !stopped) scheduleRefresh()
+  }
 }
 async function select(c: Campaign, afterCreate = false) {
   if (busy.value && !afterCreate) return
@@ -154,6 +160,7 @@ async function select(c: Campaign, afterCreate = false) {
     members.value = users.members.filter(m => m.id !== c.bot_id); canOlder.value = hasOlder
     if (!validRecipient.value) recipient.value = privateRecipients.value[0]?.id || 0
     journalReady.value = true
+    if (refreshPending) scheduleRefresh()
     await loadReplyPrompt(c.id, generation)
     if (generation !== requestGeneration) return
     if (previousTab && tabs.value.some(t => t.id === previousTab)) await chooseTab(previousTab)
@@ -286,7 +293,13 @@ async function older() {
     events.value = [...log, ...events.value]; canOlder.value = log.length === 80
   })
 }
-function scheduleRefresh() { if (!active) return; clearTimeout(refreshTimer); refreshTimer = setTimeout(() => { void refresh() }, 180) }
+function scheduleRefresh() {
+  refreshPending = true
+  // Throttle rather than debounce: sustained notifications must not postpone
+  // the refresh forever, and notifications during a request get one trailing read.
+  if (!active || stopped || refreshTimer !== undefined) return
+  refreshTimer = setTimeout(() => { refreshTimer = undefined; void refresh() }, 180)
+}
 const modalOpen = computed(() => showCreate.value || showAI.value || showDice.value || !!editCharacter.value)
 let returnFocus: HTMLElement | null = null
 watch(modalOpen, async open => {
@@ -314,7 +327,7 @@ function dialogKey(event: KeyboardEvent) {
 }
 watch(() => props.revision, scheduleRefresh)
 onActivated(() => { active = true; scheduleRefresh() })
-onDeactivated(() => { active = false; clearTimeout(refreshTimer) })
+onDeactivated(() => { active = false; clearTimeout(refreshTimer); refreshTimer = undefined })
 function onVisible() { if (!document.hidden) scheduleRefresh() }
 onMounted(async () => {
   await refresh()
@@ -322,7 +335,7 @@ onMounted(async () => {
     campaigns.value.find(c => String(c.id) === savedView('campaign'))
   if (linked) await select(linked)
   else if (campaigns.value.length && !matchMedia('(max-width:760px)').matches) await select(campaigns.value[0])
-  timer = setInterval(() => { if (!document.hidden) void refresh() }, 15000)
+  timer = setInterval(() => { if (!document.hidden) void refresh() }, 3000)
   document.addEventListener('visibilitychange', onVisible)
 })
 onBeforeUnmount(() => { stopped = true; requestGeneration++; clearInterval(timer); clearTimeout(refreshTimer); document.removeEventListener('visibilitychange', onVisible); issuedToken.value = null; aiForm.value.api_key = '' })
