@@ -4,6 +4,14 @@ contextBridge.exposeInMainWorld('linchatDesktop', Object.freeze({
   isDesktop: true,
   openConnections: () => ipcRenderer.invoke('connections:open'),
   notify: (title, body) => ipcRenderer.invoke('notification', { title, body }),
+  getUpdateState: () => ipcRenderer.invoke('updates:state'),
+  checkUpdates: () => ipcRenderer.invoke('updates:check'),
+  openUpdate: () => ipcRenderer.invoke('updates:open'),
+  onUpdateState: callback => {
+    const listener = (_event, state) => callback(state)
+    ipcRenderer.on('updates:state', listener)
+    return () => ipcRenderer.removeListener('updates:state', listener)
+  },
   getState: () => ipcRenderer.invoke('launcher:state'),
   connect: (url, name) => ipcRenderer.invoke('launcher:connect', { url, name }),
   removeProfile: (url) => ipcRenderer.invoke('launcher:remove', url),

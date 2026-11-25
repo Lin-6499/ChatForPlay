@@ -27,6 +27,8 @@ import (
 //go:embed all:web/dist
 var assets embed.FS
 
+const serverVersion = "1.1.0"
+
 type config struct {
 	Addr, DataDir, PublicURL, Name string
 	SecureCookie                   bool
@@ -170,7 +172,7 @@ func (a *app) handler() http.Handler {
 			fail(w, 503, "数据库暂时不可用")
 			return
 		}
-		writeJSON(w, 200, map[string]any{"ok": true, "version": "1.0.0"})
+		writeJSON(w, 200, map[string]any{"ok": true, "version": serverVersion})
 	})
 	m.HandleFunc("POST /api/setup", a.setup)
 	m.HandleFunc("POST /api/auth/login", a.login)

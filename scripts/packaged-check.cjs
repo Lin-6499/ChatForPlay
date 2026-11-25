@@ -27,6 +27,12 @@ async function closeApplication() {
   }))
   assert.equal(metadata.packaged, true)
   assert.equal(metadata.version, version)
+  const updates = await page.evaluate(() => window.linchatDesktop.getUpdateState())
+  assert.equal(updates.currentVersion, version)
+  assert.equal(typeof updates.checking, 'boolean')
+  const checkedUpdate = await page.evaluate(() => window.linchatDesktop.checkUpdates())
+  assert.equal(checkedUpdate.error, '')
+  assert.match(checkedUpdate.latestVersion, /^\d+\.\d+\.\d+$/)
   const launcherState = await page.evaluate(() => window.linchatDesktop.getState())
   await page.screenshot({ path: path.join(out, label + '-connection-center.png') })
   await page.locator('#url').fill('https://chat.linblog.site')
@@ -40,8 +46,9 @@ async function closeApplication() {
   assert.ok(layout.scrollWidth <= layout.viewportWidth + 1)
   await page.screenshot({ path: path.join(out, label + '-cloud-onboarding.png') })
   fs.writeFileSync(path.join(out, label + '-check-results.json'), JSON.stringify({
-    timestamp: new Date().toISOString(), passed: true, executablePath, metadata, serverDataDir: launcherState.dataDir,
+    timestamp: new Date().toISOString(), passed: true, executablePath, metadata, updateCheck: checkedUpdate, serverDataDir: launcherState.dataDir,
     url: page.url(), checks: ['Packaged executable boots', 'Packaged version and application data path',
+      'Desktop update checker reaches the official GitHub release API',
       'Desktop connects to deployed HTTPS service through configured system networking', 'Cloud onboarding form renders without horizontal overflow'],
   }, null, 2))
   console.log('PASS Packaged Windows executable and deployed HTTPS onboarding', JSON.stringify(metadata))

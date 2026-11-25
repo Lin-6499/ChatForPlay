@@ -10,7 +10,10 @@ async function check(name, work) {
   await check('HTTPS health endpoint and version', async () => {
     const r = await fetch(base + '/api/health', { signal: AbortSignal.timeout(15000) })
     assert.equal(r.status, 200)
-    assert.deepEqual(await r.json(), { ok: true, version: '1.0.0' })
+    const health = await r.json()
+    assert.equal(health.ok, true)
+    assert.match(health.version, /^\d+\.\d+\.\d+$/)
+    if (process.env.LINCHAT_EXPECT_VERSION) assert.equal(health.version, process.env.LINCHAT_EXPECT_VERSION)
   })
   await check('Production Vue assets served with security headers', async () => {
     const r = await fetch(base + '/', { signal: AbortSignal.timeout(15000) })

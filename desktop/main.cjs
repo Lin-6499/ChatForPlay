@@ -1,4 +1,5 @@
-const { app, BrowserWindow, Menu, Tray, ipcMain, shell, Notification, clipboard, nativeImage, session } = require('electron')
+const { app, BrowserWindow, Menu, Tray, ipcMain, shell, Notification, clipboard, nativeImage, session, dialog } = require('electron')
+const { RELEASE_API, createUpdater } = require('./updates.cjs')
 const { spawn } = require('node:child_process')
 const fs = require('node:fs')
 const path = require('node:path')
@@ -14,6 +15,7 @@ const iconPath = path.join(__dirname, 'assets', 'icon.png')
 let win, tray, host, quitting = false, shutdownStarted = false, selectedOrigin = ''
 let hostState = { running: false, starting: false, url: '', setupURL: '', mode: '', error: '' }
 let profiles = []
+let updater, updateTimer, updateInterval
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) app.quit()
 
@@ -28,6 +30,41 @@ function requireLauncher(event) {
 function trustedChat(event) {
   try { return event.sender === win?.webContents && new URL(event.senderFrame.url).origin === selectedOrigin }
   catch { return false }
+}
+function requireDesktopPage(event) {
+  if (!isLauncher(event) && !trustedChat(event)) throw new Error('来源无效')
+}
+async function fetchRelease() {
+  const network = session.fromPartition('linchat-updates')
+  let failure
+  for (const mode of ['system', 'direct']) {
+    await network.setProxy({ mode })
+    await network.closeAllConnections()
+    try {
+      const response = await network.fetch(RELEASE_API, {
+        headers: { Accept: 'application/vnd.github+json', 'User-Agent': `LinChat/${app.getVersion()}` },
+        signal: AbortSignal.timeout(12000),
+      })
+      if (!response.ok) {
+        if (response.status === 403 || response.status === 429) throw new Error('更新服务暂时限流，请稍后重试')
+        throw new Error(`更新服务暂不可用（HTTP ${response.status}），请稍后重试`)
+      }
+      return await response.json()
+    } catch (error) { failure = error }
+  }
+  throw new Error(/更新服务/.test(failure?.message || '') ? failure.message : '无法连接更新服务，请检查网络后重试')
+}
+async function checkUpdatesFromMenu() {
+  const state = await updater.check()
+  showWindow()
+  const response = await dialog.showMessageBox(win, {
+    type: state.error ? 'warning' : 'info', title: 'LinChat · 检查更新',
+    message: state.error || (state.available ? `发现新版本 v${state.latestVersion}` : `当前已是最新版本 v${state.currentVersion}`),
+    detail: state.available ? '下载新版安装包并运行，即可升级 LinChat。' : '程序会在启动后和运行期间自动检查更新。',
+    buttons: state.available ? ['下载新版', '稍后'] : ['知道了'],
+    defaultId: 0, cancelId: state.available ? 1 : 0,
+  })
+  if (state.available && response.response === 0) await updater.open()
 }
 function readProfiles() {
   try { profiles = JSON.parse(fs.readFileSync(configPath(), 'utf8')).profiles.filter(p => typeof p.url === 'string' && typeof p.name === 'string') }
@@ -168,6 +205,7 @@ async function stopHost() {
 
 app.on('second-instance', showWindow)
 app.on('before-quit', event => {
+  clearTimeout(updateTimer); clearInterval(updateInterval)
   quitting = true
   if (host && !shutdownStarted) {
     event.preventDefault(); shutdownStarted = true
@@ -195,6 +233,28 @@ app.whenReady().then(() => {
   })
   win.on('close', event => { if (!quitting) { event.preventDefault(); win.hide() } })
   win.once('ready-to-show', showWindow)
+  updater = createUpdater({
+    currentVersion: app.getVersion(), fetchRelease,
+    changed: state => {
+      if (win && !win.isDestroyed()) {
+        const url = win.webContents.getURL()
+        if (url.split('#')[0] === launcherURL || (selectedOrigin && url.startsWith(selectedOrigin + '/'))) {
+          win.webContents.send('updates:state', state)
+        }
+      }
+    },
+    announce: version => {
+      if (!Notification.isSupported()) return
+      const notice = new Notification({ title: `LinChat v${version} 可更新`, body: '点击下载新版安装包，体验最新功能。', icon: iconPath })
+      notice.on('click', () => { void updater.open() })
+      notice.show()
+    },
+    openExternal: url => shell.openExternal(url),
+  })
+  if (app.isPackaged) {
+    updateTimer = setTimeout(() => { void updater.check() }, 10000)
+    updateInterval = setInterval(() => { void updater.check() }, 6 * 60 * 60 * 1000)
+  }
   win.webContents.setWindowOpenHandler(({ url }) => {
     try { if (['https:', 'http:'].includes(new URL(url).protocol)) void shell.openExternal(url) } catch {}
     return { action: 'deny' }
@@ -214,6 +274,7 @@ app.whenReady().then(() => {
     { label: 'LinChat', submenu: [
       { label: '连接中心', accelerator: 'CommandOrControl+Shift+H', click: () => openConnections() },
       { label: '显示窗口', click: showWindow },
+      { label: '检查更新', click: () => { void checkUpdatesFromMenu() } },
       { type: 'separator' }, { label: '退出 LinChat', accelerator: 'CommandOrControl+Q', click: () => app.quit() },
     ] },
     { label: '编辑', submenu: [{ role: 'undo', label: '撤销' }, { role: 'redo', label: '重做' }, { type: 'separator' },
@@ -227,6 +288,7 @@ app.whenReady().then(() => {
   tray.setToolTip('LinChat · 让交流近一点')
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: '打开 LinChat', click: showWindow }, { label: '连接中心', click: () => openConnections() },
+    { label: '检查更新', click: () => { void checkUpdatesFromMenu() } },
     { type: 'separator' }, { label: '退出（同时停止本机服务端）', click: () => app.quit() },
   ]))
   tray.on('double-click', showWindow)
@@ -241,6 +303,9 @@ app.whenReady().then(() => {
       n.on('click', showWindow); n.show()
     }
   })
+  ipcMain.handle('updates:state', event => { requireDesktopPage(event); return updater.getState() })
+  ipcMain.handle('updates:check', event => { requireDesktopPage(event); return updater.check() })
+  ipcMain.handle('updates:open', event => { requireDesktopPage(event); return updater.open() })
   ipcMain.handle('launcher:state', event => {
     requireLauncher(event)
     if (hostState.setupURL && !fs.existsSync(path.join(hostData(), '首次初始化.txt'))) hostState.setupURL = ''

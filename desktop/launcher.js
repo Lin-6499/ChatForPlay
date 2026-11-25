@@ -62,6 +62,23 @@ $('enter-host').addEventListener('click', () => connect(state.host.setupURL || s
 $('copy-host').addEventListener('click', async () => { await api.copy(state.host.url); toast('连接地址已复制') })
 $('open-data').addEventListener('click', async () => { await api.openData() })
 api.onHostState(host => { if (state) renderHost(host) })
+function renderUpdate(update) {
+  $('update-banner').hidden = !update.available
+  $('update-title').textContent = `发现新版本 v${update.latestVersion}`
+  $('check-update').disabled = update.checking
+  $('check-update').textContent = update.checking ? '检查中…' : '检查更新'
+}
+api.onUpdateState(renderUpdate)
+api.getUpdateState().then(renderUpdate).catch(error)
+$('check-update').addEventListener('click', async () => {
+  try {
+    const update = await api.checkUpdates()
+    renderUpdate(update)
+    if (update.error) toast(update.error)
+    else if (!update.available) toast(`当前已是最新版本 v${update.currentVersion}`)
+  } catch (e) { error(e) }
+})
+$('download-update').addEventListener('click', () => api.openUpdate().catch(error))
 api.getState().then(s => {
   state = s; $('version').textContent = 'v' + s.version
   $('adapter').textContent = s.adapters.length ? 'Radmin VPN 已就绪 · ' + s.adapters.join(' / ') : '未检测到 Radmin IPv4 网卡，请先安装并连接 VPN'

@@ -63,7 +63,7 @@ func (a *app) status(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, map[string]any{"name": a.cfg.Name, "initialized": n > 0,
-		"max_upload": a.cfg.MaxUpload, "registration": "invite", "version": "1.0.0"})
+		"max_upload": a.cfg.MaxUpload, "registration": "invite", "version": serverVersion})
 }
 
 func (a *app) setup(w http.ResponseWriter, r *http.Request) {

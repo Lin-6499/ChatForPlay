@@ -4,23 +4,26 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 )
 
 type conversation struct {
-	ID          int64  `json:"id"`
-	Kind        string `json:"kind"`
-	Name        string `json:"name"`
-	OwnerID     int64  `json:"owner_id"`
-	MemberCount int    `json:"member_count"`
-	LastID      int64  `json:"last_id"`
-	LastAt      int64  `json:"last_at"`
-	Preview     string `json:"preview"`
-	Unread      int    `json:"unread"`
-	LastRead    int64  `json:"last_read"`
+	ID             int64  `json:"id"`
+	Kind           string `json:"kind"`
+	Name           string `json:"name"`
+	OwnerID        int64  `json:"owner_id"`
+	MemberCount    int    `json:"member_count"`
+	LastID         int64  `json:"last_id"`
+	LastAt         int64  `json:"last_at"`
+	Preview        string `json:"preview"`
+	Unread         int    `json:"unread"`
+	LastRead       int64  `json:"last_read"`
+	UnreadMentions int    `json:"unread_mentions"`
 }
 
 func (a *app) conversationID(w http.ResponseWriter, r *http.Request, u user) (int64, bool) {
@@ -48,9 +51,11 @@ func (a *app) conversations(w http.ResponseWriter, r *http.Request, u user) {
 	  COALESCE((SELECT CASE WHEN kind='text' THEN content ELSE '[附件]' END FROM messages
 	    WHERE conversation_id=c.id ORDER BY id DESC LIMIT 1),'开始你们的对话'),
 	  (SELECT COUNT(*) FROM messages WHERE conversation_id=c.id AND id>mm.last_read AND sender_id<>?),
-	  mm.last_read
+	  mm.last_read,
+	  (SELECT COUNT(*) FROM messages msg WHERE msg.conversation_id=c.id AND msg.id>mm.last_read
+	    AND msg.sender_id<>? AND EXISTS(SELECT 1 FROM message_mentions mt WHERE mt.message_id=msg.id AND mt.user_id=?))
 	FROM conversations c JOIN members mm ON mm.conversation_id=c.id WHERE mm.user_id=?
-	ORDER BY 7 DESC,c.id DESC`, u.ID, u.ID, u.ID)
+	ORDER BY 7 DESC,c.id DESC`, u.ID, u.ID, u.ID, u.ID, u.ID)
 	if err != nil {
 		fail(w, 500, "读取会话失败")
 		return
@@ -59,7 +64,7 @@ func (a *app) conversations(w http.ResponseWriter, r *http.Request, u user) {
 	out := []conversation{}
 	for rows.Next() {
 		var c conversation
-		if rows.Scan(&c.ID, &c.Kind, &c.Name, &c.OwnerID, &c.MemberCount, &c.LastID, &c.LastAt, &c.Preview, &c.Unread, &c.LastRead) != nil {
+		if rows.Scan(&c.ID, &c.Kind, &c.Name, &c.OwnerID, &c.MemberCount, &c.LastID, &c.LastAt, &c.Preview, &c.Unread, &c.LastRead, &c.UnreadMentions) != nil {
 			fail(w, 500, "读取会话失败")
 			return
 		}
@@ -281,16 +286,44 @@ func (a *app) sendMessage(w http.ResponseWriter, r *http.Request, u user) {
 		return
 	}
 	var in struct {
-		ClientID string `json:"client_id"`
-		Content  string `json:"content"`
+		ClientID string    `json:"client_id"`
+		Content  string    `json:"content"`
+		Mentions []mention `json:"mentions"`
 	}
 	if !decode(w, r, &in) {
 		return
 	}
+	leading := utf8.RuneCountInString(in.Content) - utf8.RuneCountInString(strings.TrimLeftFunc(in.Content, unicode.IsSpace))
 	in.Content = strings.TrimSpace(in.Content)
 	if !idPattern.MatchString(in.ClientID) || in.Content == "" || utf8.RuneCountInString(in.Content) > 4000 {
 		fail(w, 400, "消息需为 1–4000 个字符，并携带有效的消息编号")
 		return
+	}
+	if len(in.Mentions) > 100 {
+		fail(w, 400, "每条消息最多包含 100 处 @成员")
+		return
+	}
+	for i := range in.Mentions {
+		in.Mentions[i].Start -= leading
+		in.Mentions[i].End -= leading
+	}
+	slices.SortFunc(in.Mentions, func(a, b mention) int {
+		if a.Start < b.Start {
+			return -1
+		}
+		if a.Start > b.Start {
+			return 1
+		}
+		return 0
+	})
+	runes := []rune(in.Content)
+	end := 0
+	for _, m := range in.Mentions {
+		if m.UserID <= 0 || m.Start < end || m.End <= m.Start || m.End > len(runes) || runes[m.Start] != '@' {
+			fail(w, 400, "@成员标记无效，请重新选择成员")
+			return
+		}
+		end = m.End
 	}
 	if !a.limiter.allow("message:"+u.Username, 120, time.Minute) {
 		fail(w, 429, "发送太快，请稍后重试")
@@ -302,27 +335,48 @@ func (a *app) sendMessage(w http.ResponseWriter, r *http.Request, u user) {
 		return
 	}
 	defer tx.Rollback()
-	var existing, existingCID int64
-	var content, kind string
-	err = tx.QueryRow("SELECT id,conversation_id,content,kind FROM messages WHERE sender_id=? AND client_id=?",
-		u.ID, in.ClientID).Scan(&existing, &existingCID, &content, &kind)
+	existing, err := scanMessage(tx.QueryRow(messageSelect+" WHERE m.sender_id=? AND m.client_id=?", u.ID, in.ClientID))
 	if err == nil {
 		_ = tx.Rollback()
-		if existingCID != cid || content != in.Content || kind != "text" {
+		if existing.ConversationID != cid || existing.Content != in.Content || existing.Kind != "text" || !slices.Equal(existing.Mentions, in.Mentions) {
 			fail(w, 409, "消息编号已经用于其他内容")
 			return
 		}
-		m, err := a.store.getMessage(existing)
-		if err != nil {
-			fail(w, 500, "读取消息失败")
-			return
-		}
-		writeJSON(w, 200, m)
+		writeJSON(w, 200, existing)
 		return
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		fail(w, 500, "读取消息失败")
 		return
+	}
+	if len(in.Mentions) > 0 {
+		var kind string
+		if tx.QueryRow("SELECT kind FROM conversations WHERE id=?", cid).Scan(&kind) != nil {
+			fail(w, 500, "读取会话失败")
+			return
+		}
+		if kind != "group" && kind != "lobby" {
+			fail(w, 400, "只有群聊和公共大厅支持 @成员")
+			return
+		}
+		for _, m := range in.Mentions {
+			var nickname, username string
+			err := tx.QueryRow(`SELECT u.nickname,u.username FROM users u JOIN members mm ON mm.user_id=u.id
+				WHERE mm.conversation_id=? AND u.id=?`, cid, m.UserID).Scan(&nickname, &username)
+			if errors.Is(err, sql.ErrNoRows) {
+				fail(w, 400, "只能 @ 当前会话里的成员")
+				return
+			}
+			if err != nil {
+				fail(w, 500, "读取成员失败")
+				return
+			}
+			label := string(runes[m.Start:m.End])
+			if label != "@"+nickname && label != "@"+username {
+				fail(w, 400, "被提及成员的昵称已变化，请重新选择")
+				return
+			}
+		}
 	}
 	res, err := tx.Exec("INSERT INTO messages(conversation_id,sender_id,client_id,kind,content,created_at) VALUES(?,?,?,'text',?,?)",
 		cid, u.ID, in.ClientID, in.Content, time.Now().UnixMilli())
@@ -331,6 +385,13 @@ func (a *app) sendMessage(w http.ResponseWriter, r *http.Request, u user) {
 		return
 	}
 	mid, _ := res.LastInsertId()
+	for _, m := range in.Mentions {
+		if _, err = tx.Exec("INSERT INTO message_mentions(message_id,user_id,start_offset,end_offset) VALUES(?,?,?,?)",
+			mid, m.UserID, m.Start, m.End); err != nil {
+			fail(w, 500, "保存 @成员失败")
+			return
+		}
+	}
 	if err = tx.Commit(); err != nil {
 		fail(w, 500, "保存消息失败")
 		return

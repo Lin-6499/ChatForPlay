@@ -12,10 +12,12 @@
 - 管理员首次初始化、邀请注册、账号登录与个人密码修改。
 - 公共大厅、一对一私聊、自建群聊、群主添加成员。
 - WebSocket 实时推送、多人在线状态、会话未读数、已读人数。
+- 群聊和公共大厅 @成员，支持昵称/账号搜索、多人提及、高亮及“@我”未读提醒。
 - 文字、图片、文件，支持图片粘贴、拖放文件、上传进度和失败重试。
 - 服务端落盘确认、消息编号去重、历史分页、重连后增量同步。
 - Electron 连接中心、保存服务端地址、托盘常驻、系统通知。
 - Electron 内置 Go 服务端，可一键启动 Radmin 主机或仅本机体验。
+- 桌面新版自动提醒，可在连接中心、托盘或个人设置中手动检查更新。
 
 当前默认限制：每条文字 4,000 字符、每个附件 25 MiB、累计附件 5 GiB、自建群最多 100 人。
 这是初版工程配置上限，未将其作为实测并发容量保证。语音/视频通话不在本版功能内。
@@ -24,9 +26,9 @@
 
 ### 一键安装
 
-**[下载 LinChat 1.0.1 一键安装包](https://github.com/Lin-6499/ChatForPlay/releases/download/v1.0.1/LinChat-Setup-1.0.1.exe)**
+**[下载 LinChat 1.1.0 一键安装包](https://github.com/Lin-6499/ChatForPlay/releases/download/v1.1.0/LinChat-Setup-1.1.0.exe)**
 
-1. 下载 `LinChat-Setup-1.0.1.exe`。
+1. 下载 `LinChat-Setup-1.1.0.exe`。
 2. 双击运行，自动安装并创建桌面、开始菜单快捷方式，完成后自动打开 LinChat。
 3. 点击预置的 **“LinChat 云端”**，用自己的账号登录。新成员先使用管理员发来的邀请链接注册。
 
@@ -41,8 +43,8 @@
 开发者本地构建后的文件：
 
 ```text
-dist/desktop/1.0.1/LinChat-Setup-1.0.1.exe       一键安装版
-dist/desktop/1.0.1/LinChat-Portable-1.0.1.exe    便携版
+dist/desktop/1.1.0/LinChat-Setup-1.1.0.exe       一键安装版
+dist/desktop/1.1.0/LinChat-Portable-1.1.0.exe    便携版
 dist/server/linchat-windows-amd64.exe           独立 Windows 服务端
 dist/server/linchat-linux-amd64                 独立 Linux 服务端
 ```
@@ -54,6 +56,28 @@ dist/server/linchat-linux-amd64                 独立 Linux 服务端
 3. 使用管理员提供的邀请创建账号，或直接登录。
 
 默认地址是预置连接资料；只有云端部署、DNS 和 HTTPS 均完成后才能使用。实际部署状态见 `DEPLOYMENT.md`。
+
+### @ 群成员
+
+在群聊或公共大厅输入 `@`，也可以点击输入框下方的 **@ 图标**：
+
+1. 输入昵称或账号筛选当前会话的成员。
+2. 点击候选成员，或用 ↑ / ↓ 选择、Enter / Tab 确认。
+3. 继续输入消息，可再次输入 `@` 添加其他成员，最后发送。
+
+候选列表同时显示昵称和账号，便于区分同名成员。输入区显示将提醒的人数；手动修改已选中的名字会取消这处提及，重新选择即可。Esc 关闭候选列表，Shift + Enter 换行，中文输入法确认文字不会误发消息。
+
+被提及的人在消息中看到 **“提到了你”** 和高亮名字，未读会话显示 **“@我”**。离线期间的提醒会保留到重新连接，阅读消息后清除未读标记。桌面最小化时会收到注明“@了你”的系统通知；网页系统通知需要网站通知权限。
+
+这项功能需要连接到 1.1.0 或更高版本的服务端。本机/Radmin 主机使用新版内置服务端，云端需由服务器管理员同步升级。
+
+### 桌面更新提醒
+
+1.1.0 起，正式桌面版启动约 10 秒后自动检查 GitHub 正式发行版，运行期间每 6 小时再次检查。发现新版时会显示更新提示和系统通知，点击 **“下载更新”** 后运行下载的安装包即可升级。
+
+手动入口：连接中心底部 **“检查更新”**、托盘菜单 **“检查更新”**、聊天页面 **“个人设置 → 检查更新”**。网络失败时可以稍后重试。检查只接受本仓库已上传的正式版 Windows 安装包，不提示降级或预览版本。
+
+**1.0.x 需要先手动安装一次 1.1.0，之后才具备更新提醒功能。** 更新时会保留用户数据目录。
 
 ### 在 Radmin 网络创建空间
 
@@ -156,6 +180,7 @@ npm run build
 go test -v ./...
 go vet ./...
 npm run test:desktop
+npm run test:features
 npm run package
 node scripts/packaged-check.cjs
 node scripts/cloud-check.cjs
@@ -164,6 +189,8 @@ node scripts/cloud-check.cjs
 `test:desktop` 会创建独立测试数据目录、自动启动 Electron 和内置服务端，使用三个测试账号验证初始化、实时聊天、文件、建群、桌面权限边界；检测到 Radmin 网卡时还会验证切换监听地址后数据保留。结果和截图位于 `dist/verification/`，测试账号不会写入正式数据。
 
 `packaged-check` 启动实际打包的 Windows 程序并连接已部署的 HTTPS 入口，验证安装产物的加载和引导页。`cloud-check` 验证公网 HTTPS、前端资源、未登录访问隔离、来源校验和初始化令牌保护。
+
+`test:features` 验证提及的 Unicode 位置、编辑失效、同名账号区分所依赖的结构，以及更新版本比较、下载地址校验、请求合并和离线状态。Go 集成测试另覆盖提及成员权限、WebSocket 推送、未读与已读、重发去重、SQLite 持久化及旧数据库升级；桌面验证包含真实群聊 @ 操作、中文输入法、窄屏弹层、系统通知和更新提醒。
 
 Radmin 和内网地址在 LinChat 自己的网络会话中使用直连，避免被电脑的 HTTP 系统代理误转发；云端优先使用系统网络设置，遇到代理或连接故障时尝试直连，始终保留 TLS 证书验证。
 
@@ -181,7 +208,7 @@ npm run release:publish
 
 `release:manifest` 生成用于源码一键安装的 `desktop-release.json`，包括对应版本的下载地址、大小和 SHA-256；该文件需要随源码提交。构建产物保存在 `dist/desktop/<版本>/`。
 
-`release:publish` 使用已登录的 Git Credential Manager 凭据，或当前进程中的 `GH_TOKEN` / `GITHUB_TOKEN`，创建 GitHub Release 草稿，上传安装版、便携版及校验文件。GitHub 返回的文件摘要全部一致后才公开发布。已公开的版本使用新版本号发布，凭据不会写入项目文件。
+`release:publish` 使用已登录的 Git Credential Manager 凭据，或当前进程中的 `GH_TOKEN` / `GITHUB_TOKEN`，创建 GitHub Release 草稿，上传安装版、便携版、Windows/Linux 独立服务端及校验文件。GitHub 返回的文件摘要全部一致后才公开发布。已公开的版本使用新版本号发布，凭据不会写入项目文件。发行说明可放在 `releases/<版本>.md`。
 
 发布后可验证实际公网下载链路：
 

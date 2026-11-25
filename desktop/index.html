@@ -19,6 +19,7 @@
     <header><span class="eyebrow">CONNECTION CENTER</span><span class="desktop-badge">Electron 桌面版</span></header>
     <h2>连接你的空间</h2><p class="subtitle">多人实时通信，让想法在同一处相遇。</p>
     <div id="error" class="error" hidden role="alert"></div>
+    <div id="update-banner" class="update-banner" hidden role="status"><div><b id="update-title"></b><p>下载新版安装包，安装后即可使用新功能。</p></div><button id="download-update" class="text-button">下载更新 ↗</button></div>
     <div class="tabs" role="tablist"><button class="selected" data-tab="join" role="tab" aria-selected="true">加入聊天</button><button data-tab="host" role="tab" aria-selected="false">本机创建空间</button></div>
     <section id="join-panel">
       <form id="connect-form"><label>连接名称<input id="name" maxlength="60" value="LinChat 云端" placeholder="给这个连接起个名字" /></label><label>服务端地址<div class="url-input"><span>↗</span><input id="url" type="url" required value="https://chat.linblog.site" placeholder="https://chat.linblog.site" /></div></label><p class="hint">云端填写 HTTPS 地址；Radmin 填写主机的虚拟 IP，例如 http://26.1.2.3:8787。</p><button class="primary" id="connect" type="submit">进入聊天空间 <span>↗</span></button></form>
@@ -32,7 +33,7 @@
       <div id="host-card" class="host-card" hidden><div class="host-heading"><span class="dot"></span><b>本机服务端运行中</b><button id="stop-host" class="text-button danger">停止</button></div><p id="host-url"></p><div class="host-buttons"><button id="enter-host" class="primary">打开聊天空间</button><button id="copy-host" class="secondary">复制地址</button></div><p class="hint">首次打开时创建管理员账号，再从聊天界面邀请成员。</p></div>
       <div class="host-notes"><p>· 消息、账号和附件保存在这台电脑上。</p><p>· 关闭窗口后继续在托盘运行；退出程序会停止本机服务。</p><p>· 首次组网需允许 Radmin 网卡上的 TCP 8787 入站连接。</p><button id="open-data" class="text-button">打开本机数据目录 ↗</button></div>
     </section>
-    <footer class="main-footer"><span>云端与本地独立部署时，账号和记录各自保存。</span><span>LINCHAT / 01</span></footer>
+    <footer class="main-footer"><span>云端与本地独立部署时，账号和记录各自保存。</span><button id="check-update" class="text-button">检查更新</button></footer>
   </main>
   <div id="toast" class="toast" hidden role="status"></div>
   <script src="launcher.js"></script>

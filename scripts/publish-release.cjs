@@ -1,4 +1,4 @@
-// Publish built Windows installers using the existing GitHub Git credential.
+// Publish desktop installers and server artifacts using the existing GitHub Git credential.
 // Credentials stay in memory and are never written to files or printed.
 const fs = require('node:fs')
 const path = require('node:path')
@@ -58,6 +58,9 @@ async function digest(file) {
   const files = [
     installer,
     path.join(root, 'dist', 'desktop', version, `LinChat-Portable-${version}.exe`),
+    path.join(root, 'dist', 'server', 'linchat-windows-amd64.exe'),
+    path.join(root, 'dist', 'server', 'linchat-linux-amd64'),
+    path.join(root, 'deploy', 'update-cloud.sh'),
     path.join(root, 'desktop-release.json'),
     path.join(root, 'dist', 'SHA256SUMS.txt'),
   ]
@@ -65,8 +68,8 @@ async function digest(file) {
   let release
   if (lookup.status === 404) {
     release = await api('/releases', 'POST', {
-      tag_name: `v${version}`, target_commitish: commit, name: `LinChat ${version} · 一键安装版`, draft: true, prerelease: false,
-      body: [
+      tag_name: `v${version}`, target_commitish: commit, name: `LinChat ${version}`, draft: true, prerelease: false,
+      body: fs.existsSync(path.join(root, 'releases', version + '.md')) ? fs.readFileSync(path.join(root, 'releases', version + '.md'), 'utf8') : [
         '## Windows 一键安装',
         '',
         `**直接使用：下载并双击 \`LinChat-Setup-${version}.exe\`，安装后自动打开 LinChat。**`,
@@ -110,7 +113,7 @@ async function digest(file) {
     const response = await request(uploadBase + '?name=' + encodeURIComponent(name), {
       method: 'POST', body: fs.createReadStream(file), duplex: 'half',
       signal: AbortSignal.timeout(20 * 60 * 1000),
-      headers: { 'Content-Type': name.endsWith('.exe') ? 'application/octet-stream' : 'text/plain', 'Content-Length': String(size) },
+      headers: { 'Content-Type': name.endsWith('.exe') || name === 'linchat-linux-amd64' ? 'application/octet-stream' : 'text/plain', 'Content-Length': String(size) },
     })
     const asset = await response.json()
     if (!response.ok) throw new Error(`Uploading ${name}: HTTP ${response.status} ${asset.message || ''}`)

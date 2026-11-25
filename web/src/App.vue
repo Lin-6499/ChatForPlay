@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import Icon from './Icon.vue'
+import { editMentions, mentionQuery, prepareText, messageParts, type Mention, type DraftMention } from './mentions'
 
 interface User { id: number; username: string; nickname: string; admin: boolean; online: boolean; last_read?: number }
-interface Conversation { id: number; kind: string; name: string; owner_id: number; member_count: number; last_id: number; last_at: number; preview: string; unread: number; last_read: number }
-interface Message { id: number; conversation_id: number; sender_id: number; sender_name: string; client_id: string; kind: string; content: string; file_id?: string; file_name?: string; file_size?: number; file_mime?: string; created_at: number }
-interface Pending { client_id: string; conversation_id: number; content: string; created_at: number; error?: string; retryable?: boolean }
+interface Conversation { id: number; kind: string; name: string; owner_id: number; member_count: number; last_id: number; last_at: number; preview: string; unread: number; last_read: number; unread_mentions?: number }
+interface Message { id: number; conversation_id: number; sender_id: number; sender_name: string; client_id: string; kind: string; content: string; file_id?: string; file_name?: string; file_size?: number; file_mime?: string; created_at: number; mentions?: Mention[] }
+interface Pending { client_id: string; conversation_id: number; content: string; created_at: number; mentions?: Mention[]; error?: string; retryable?: boolean }
 interface Page { messages: Message[]; more: boolean }
 type Modal = '' | 'directory' | 'group' | 'invite' | 'settings' | 'connection' | 'members' | 'addMembers'
 class ApiError extends Error { constructor(message: string, public status: number) { super(message) } }
@@ -21,11 +22,25 @@ const profile = ref({ nickname: '', old_password: '', new_password: '' })
 const query = ref(''), directoryQuery = ref(''), groupName = ref(''), selectedUsers = ref<number[]>([])
 const draft = ref(''), modal = ref<Modal>(''), showMobileChat = ref(false), showDetails = ref(false)
 const moreHistory = ref(false), loadingHistory = ref(false), toast = ref(''), connection = ref('连接中')
+const toastKind = ref('')
 const inviteUses = ref(10), inviteLink = ref(''), upload = ref<{ name: string; percent: number } | null>(null)
 const uploadRetry = ref<{ file: File; cid: number; clientID: string } | null>(null)
 const messageList = ref<HTMLElement>(), composer = ref<HTMLTextAreaElement>(), fileInput = ref<HTMLInputElement>()
 const connectionURL = ref(''), connectionLabel = ref(''), recentServers = ref<{ name: string; url: string }[]>([])
 const dragging = ref(false)
+const draftMentions = ref<DraftMention[]>([]), mentionSearch = ref<ReturnType<typeof mentionQuery>>(null)
+const mentionIndex = ref(0), composing = ref(false), membersReady = ref(false)
+const canMention = computed(() => current.value?.kind === 'group' || current.value?.kind === 'lobby')
+const mentionOptions = computed(() => {
+  const search = mentionSearch.value?.query.toLocaleLowerCase() || ''
+  return members.value.filter(p => p.id !== me.value?.id && `${p.nickname} ${p.username}`.toLocaleLowerCase().includes(search))
+    .sort((a, b) => Number(b.online) - Number(a.online) || a.nickname.localeCompare(b.nickname, 'zh-CN')).slice(0, 30)
+})
+const mentionOpen = computed(() => canMention.value && mentionSearch.value !== null && !composing.value)
+const selectedMention = computed(() => mentionOptions.value[Math.min(mentionIndex.value, mentionOptions.value.length - 1)])
+const mentionedPeople = computed(() => new Set(draftMentions.value.map(m => m.user_id)).size)
+const desktopUpdate = ref<DesktopUpdateState | null>(null), dismissedUpdate = ref('')
+let offUpdate: (() => void) | undefined
 let ws: WebSocket | null = null, reconnectTimer: ReturnType<typeof setTimeout> | undefined
 let toastTimer: ReturnType<typeof setTimeout> | undefined, refreshTimer: ReturnType<typeof setTimeout> | undefined
 let reconnectAttempt = 0, intentionalClose = false, flushing = false, selectionVersion = 0
@@ -52,7 +67,7 @@ async function api<T = any>(path: string, method = 'GET', body?: unknown): Promi
   } finally { clearTimeout(timer) }
 }
 function explain(e: unknown) { return e instanceof ApiError ? e.message : '连接暂时不可用，请检查网络或服务端是否运行' }
-function notify(text: string) { toast.value = text; clearTimeout(toastTimer); toastTimer = setTimeout(() => toast.value = '', 4200) }
+function notify(text: string, kind = '') { toast.value = text; toastKind.value = kind; clearTimeout(toastTimer); toastTimer = setTimeout(() => toast.value = '', 4200) }
 function avatar(name: string) { return Array.from(name || 'L').slice(0, 1).join('').toUpperCase() }
 function hue(id: number) { return ['mint', 'blue', 'peach', 'lilac', 'sand'][id % 5] }
 function time(ts: number) { return new Date(ts).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) }
@@ -87,13 +102,15 @@ function scheduleRefresh() {
 async function loadMembers(cid = currentID.value) {
   if (!cid) return
   const result = await api<{ members: User[] }>(`/conversations/${cid}`)
-  if (currentID.value === cid) members.value = result.members
+  if (currentID.value === cid) { members.value = result.members; membersReady.value = true }
 }
-async function selectConversation(c: Conversation) {
-  if (currentID.value === c.id) { showMobileChat.value = true; return }
+async function selectConversation(c: Conversation, reveal = true) {
+  if (toastKind.value === 'mention') { toast.value = ''; clearTimeout(toastTimer) }
+  if (currentID.value === c.id) { showMobileChat.value = true; await nextTick(); await markRead(); return }
   const version = ++selectionVersion
   currentID.value = c.id; messages.value = []; members.value = []; draft.value = ''
-  moreHistory.value = false; loadingHistory.value = true; showMobileChat.value = true; showDetails.value = false
+  draftMentions.value = []; mentionSearch.value = null; membersReady.value = false
+  moreHistory.value = false; loadingHistory.value = true; showMobileChat.value = reveal; showDetails.value = false
   try {
     const [page] = await Promise.all([api<Page>(`/conversations/${c.id}/messages`), loadMembers(c.id)])
     if (version !== selectionVersion) return
@@ -134,7 +151,7 @@ async function syncActive() {
   if (scroll) { await bottom(); await markRead() }
 }
 async function markRead() {
-  if (document.hidden || !atBottom() || !me.value) return
+  if (document.hidden || (!showMobileChat.value && matchMedia('(max-width:760px)').matches) || !atBottom() || !me.value) return
   const cid = currentID.value, last = messages.value.at(-1)?.id
   if (!last || (readSent.get(cid) || 0) >= last) return
   readSent.set(cid, last)
@@ -148,7 +165,7 @@ async function enterApp() {
   profile.value = { nickname: me.value.nickname, old_password: '', new_password: '' }
   try { pending.value = JSON.parse(localGet(pendingKey()) || '[]') } catch { pending.value = [] }
   [people.value] = await Promise.all([api<User[]>('/users'), refreshConversations()])
-  if (conversations.value.length) await selectConversation(conversations.value[0])
+  if (conversations.value.length) await selectConversation(conversations.value[0], false)
   showMobileChat.value = false
   intentionalClose = false; reconnectAttempt = 0
   connect()
@@ -171,6 +188,10 @@ function connect() {
         await flushPending()
       } else if (event.type === 'message') {
         const m = event.message as Message
+        const alreadyReceived = messages.value.some(item => item.id === m.id)
+        const mentioned = mentionedMe(m)
+        const readingHere = m.conversation_id === currentID.value && atBottom() && !document.hidden &&
+          (showMobileChat.value || !matchMedia('(max-width:760px)').matches)
         if (m.conversation_id === currentID.value) {
           const scroll = atBottom(); mergeMessages([m])
           if (scroll) { await bottom(); await markRead() }
@@ -178,11 +199,16 @@ function connect() {
           pending.value = pending.value.filter(p => p.client_id !== m.client_id); savePending()
         }
         scheduleRefresh()
-        if (document.hidden && m.sender_id !== me.value?.id) {
+        if (mentioned && !readingHere && !alreadyReceived && !document.hidden) {
+          const name = conversations.value.find(c => c.id === m.conversation_id)?.name || '群聊'
+          notify(`${m.sender_name} 在「${name}」中 @了你`, 'mention')
+        }
+        if (document.hidden && m.sender_id !== me.value?.id && !alreadyReceived) {
           const body = m.kind === 'text' ? m.content.slice(0, 100) : '[附件]'
-          if (desktop) void desktop.notify(m.sender_name, body)
+          const title = mentioned ? `${m.sender_name} 在群聊中 @了你` : m.sender_name
+          if (desktop) void desktop.notify(title, body)
           else if ('Notification' in window && Notification.permission === 'granted') {
-            const n = new Notification(m.sender_name, { body, tag: `conv-${m.conversation_id}` })
+            const n = new Notification(title, { body, tag: `conv-${m.conversation_id}` })
             n.onclick = () => { window.focus(); const c = conversations.value.find(c => c.id === m.conversation_id); if (c) void selectConversation(c); n.close() }
           }
         }
@@ -232,11 +258,12 @@ async function submitAuth() {
   finally { busy.value = false }
 }
 async function send() {
-  const content = draft.value.trim()
+  if (composing.value) return
+  const { content, mentions } = prepareText(draft.value, draftMentions.value)
   if (!content || !currentID.value || !me.value) return
   if (Array.from(content).length > 4000) { notify('每条消息最多 4000 个字符'); return }
-  pending.value.push({ client_id: uid(), conversation_id: currentID.value, content, created_at: Date.now() })
-  draft.value = ''; savePending(); await bottom()
+  pending.value.push({ client_id: uid(), conversation_id: currentID.value, content, mentions, created_at: Date.now() })
+  draft.value = ''; draftMentions.value = []; mentionSearch.value = null; savePending(); await bottom()
   await flushPending()
 }
 async function flushPending() {
@@ -246,7 +273,9 @@ async function flushPending() {
     for (const p of [...pending.value]) {
       if (p.error) continue
       try {
-        const m = await api<Message>(`/conversations/${p.conversation_id}/messages`, 'POST', { client_id: p.client_id, content: p.content })
+        const m = await api<Message>(`/conversations/${p.conversation_id}/messages`, 'POST', {
+          client_id: p.client_id, content: p.content, ...(p.mentions?.length ? { mentions: p.mentions } : {}),
+        })
         const scroll = atBottom()
         mergeMessages([m]); scheduleRefresh()
         if (scroll) { await bottom(); await markRead() }
@@ -261,7 +290,72 @@ async function flushPending() {
 }
 function retry(p: Pending) { p.error = ''; savePending(); void flushPending() }
 function discard(p: Pending) { pending.value = pending.value.filter(x => x.client_id !== p.client_id); savePending() }
-function onEnter(e: KeyboardEvent) { if (!e.shiftKey && !e.isComposing) { e.preventDefault(); void send() } }
+function mentionedMe(m: Message) { return m.sender_id !== me.value?.id && !!m.mentions?.some(item => item.user_id === me.value?.id) }
+function updateMentionSearch() {
+  const input = composer.value
+  if (!input || !canMention.value || input.selectionStart !== input.selectionEnd) { mentionSearch.value = null; return }
+  const next = mentionQuery(draft.value, input.selectionStart, draftMentions.value)
+  if (next?.query !== mentionSearch.value?.query || next?.start !== mentionSearch.value?.start) mentionIndex.value = 0
+  mentionSearch.value = next
+}
+function onDraftInput(e: Event) {
+  const value = (e.target as HTMLTextAreaElement).value
+  draftMentions.value = editMentions(draft.value, value, draftMentions.value)
+  draft.value = value
+  updateMentionSearch()
+}
+async function chooseMention(person: User) {
+  const search = mentionSearch.value
+  if (!search || !canMention.value) return
+  if (draftMentions.value.length >= 100) { notify('每条消息最多包含 100 处 @成员'); return }
+  const label = '@' + person.nickname
+  const value = draft.value.slice(0, search.start) + label + ' ' + draft.value.slice(search.end)
+  draftMentions.value = editMentions(draft.value, value, draftMentions.value)
+  draftMentions.value.push({ user_id: person.id, start: search.start, end: search.start + label.length })
+  draftMentions.value.sort((a, b) => a.start - b.start)
+  draft.value = value; mentionSearch.value = null
+  await nextTick()
+  composer.value?.focus()
+  composer.value?.setSelectionRange(search.start + label.length + 1, search.start + label.length + 1)
+}
+async function startMention() {
+  const input = composer.value
+  if (!input || !canMention.value) return
+  const start = input.selectionStart, end = input.selectionEnd
+  const prefix = start > 0 && !/\s/u.test(draft.value[start - 1]) ? ' @' : '@'
+  const value = draft.value.slice(0, start) + prefix + draft.value.slice(end)
+  draftMentions.value = editMentions(draft.value, value, draftMentions.value)
+  draft.value = value
+  await nextTick(); input.focus(); input.setSelectionRange(start + prefix.length, start + prefix.length)
+  updateMentionSearch()
+}
+function onComposerKey(e: KeyboardEvent) {
+  if (e.isComposing || composing.value || e.keyCode === 229) return
+  if (mentionOpen.value) {
+    if (e.key === 'Escape') { e.preventDefault(); mentionSearch.value = null; return }
+    if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && mentionOptions.value.length) {
+      e.preventDefault()
+      mentionIndex.value = (mentionIndex.value + (e.key === 'ArrowDown' ? 1 : -1) + mentionOptions.value.length) % mentionOptions.value.length
+      void nextTick(() => document.getElementById(`mention-option-${selectedMention.value?.id}`)?.scrollIntoView({ block: 'nearest' }))
+      return
+    }
+    if ((e.key === 'Enter' || e.key === 'Tab') && !e.shiftKey && selectedMention.value) {
+      e.preventDefault(); void chooseMention(selectedMention.value); return
+    }
+  }
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send() }
+}
+function onComposerCursor(e: KeyboardEvent) {
+  if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) updateMentionSearch()
+}
+async function checkDesktopUpdate() {
+  if (!desktop?.checkUpdates) return
+  desktopUpdate.value = await desktop.checkUpdates()
+  const state = desktopUpdate.value
+  if (state.error) notify(state.error)
+  else if (state.available) dismissedUpdate.value = ''
+  else notify(`当前已是最新版本 v${state.currentVersion}`)
+}
 async function sendFile(file: File, cid = currentID.value, clientID = uid()) {
   if (upload.value || !cid) return
   if (file.size > maxUpload.value) { notify(`每个文件最多 ${bytes(maxUpload.value)}`); return }
@@ -373,6 +467,10 @@ function onVisible() {
   if (!document.hidden && me.value) void Promise.all([syncActive(), refreshConversations()]).catch(() => {})
 }
 onMounted(async () => {
+  if (desktop?.getUpdateState) {
+    desktopUpdate.value = await desktop.getUpdateState().catch(() => null)
+    offUpdate = desktop.onUpdateState?.(state => desktopUpdate.value = state)
+  }
   try { recentServers.value = JSON.parse(localGet('linchat-servers') || '[]') } catch {}
   const hash = new URLSearchParams(location.hash.slice(1))
   if (hash.get('setup')) form.value.token = hash.get('setup')!
@@ -389,12 +487,17 @@ onMounted(async () => {
   document.addEventListener('visibilitychange', onVisible)
 })
 onBeforeUnmount(() => {
+  offUpdate?.()
   intentionalClose = true; ws?.close(); clearTimeout(reconnectTimer); clearTimeout(refreshTimer); clearTimeout(toastTimer)
   document.removeEventListener('visibilitychange', onVisible)
 })
 </script>
 
 <template>
+  <div class="app-shell" :class="{ 'signed-in': me }">
+  <aside v-if="desktopUpdate?.available && dismissedUpdate !== desktopUpdate.latestVersion" class="desktop-update-notice" role="status">
+    <Icon name="download" :size="20" /><div><b>LinChat v{{ desktopUpdate.latestVersion }} 可更新</b><p>下载新版安装包，安装后即可使用新功能。</p></div><button class="text-button" @click="desktop?.openUpdate?.()">下载更新</button><button class="icon-button" aria-label="暂时关闭更新提醒" @click="dismissedUpdate = desktopUpdate.latestVersion"><Icon name="close" :size="16" /></button>
+  </aside>
   <div v-if="!ready" class="loading-screen"><img src="/favicon.svg" alt="" width="56" /><p>正在连接 LinChat…</p></div>
   <main v-else-if="!me" class="auth-page">
     <section class="auth-story">
@@ -451,7 +554,7 @@ onBeforeUnmount(() => {
       <div class="conversation-list">
         <button v-for="c in filteredConversations" :key="c.id" class="conversation-row" :class="{ selected: currentID === c.id }" @click="selectConversation(c)">
           <span class="avatar" :class="c.kind === 'lobby' ? 'dark' : hue(c.id)"><Icon v-if="c.kind === 'lobby'" name="globe" :size="22" /><Icon v-else-if="c.kind === 'group'" name="users" :size="21" /><template v-else>{{ avatar(c.name) }}</template></span>
-          <span class="conversation-text"><span class="conversation-title">{{ c.name }}<small>{{ time(c.last_at) }}</small></span><span class="preview">{{ c.preview }}<b v-if="c.unread" class="unread">{{ c.unread > 99 ? '99+' : c.unread }}</b></span></span>
+          <span class="conversation-text"><span class="conversation-title">{{ c.name }}<small>{{ time(c.last_at) }}</small></span><span class="preview"><strong v-if="c.unread_mentions" class="mention-unread" :aria-label="`${c.unread_mentions} 条消息提到了你`">@我</strong><span class="preview-text">{{ c.preview }}</span><b v-if="c.unread" class="unread">{{ c.unread > 99 ? '99+' : c.unread }}</b></span></span>
         </button>
         <p v-if="!filteredConversations.length" class="small-empty">没有找到相关会话</p>
       </div>
@@ -474,10 +577,10 @@ onBeforeUnmount(() => {
             <div v-if="!messages.length && !pendingHere.length" class="chat-welcome"><span class="welcome-icon"><Icon name="chat" :size="30" /></span><h3>{{ loadingHistory ? '正在加载对话…' : '对话，从一句你好开始' }}</h3><p>{{ current.kind === 'lobby' ? '这里是大家的公共空间，打个招呼吧。' : '文字、图片、文件，让想法自由流动。' }}</p><span class="welcome-rule"></span></div>
             <template v-for="(m, i) in messages" :key="m.id">
               <div v-if="i === 0 || date(m.created_at) !== date(messages[i - 1].created_at)" class="date-separator"><span>{{ date(m.created_at) }}</span></div>
-              <article class="message" :class="{ own: m.sender_id === me.id }">
+              <article class="message" :class="{ own: m.sender_id === me.id, mentioned: mentionedMe(m) }" :data-message-id="m.id">
                 <span v-if="m.sender_id !== me.id" class="avatar small-avatar" :class="hue(m.sender_id)">{{ avatar(m.sender_name) }}</span>
-                <div class="message-content"><div class="message-meta"><b>{{ m.sender_id === me.id ? '我' : m.sender_name }}</b><time>{{ time(m.created_at) }}</time></div>
-                  <div v-if="m.kind === 'text'" class="bubble">{{ m.content }}</div>
+                <div class="message-content"><div class="message-meta"><b>{{ m.sender_id === me.id ? '我' : m.sender_name }}</b><time>{{ time(m.created_at) }}</time><span v-if="mentionedMe(m)" class="mention-label">提到了你</span></div>
+                  <div v-if="m.kind === 'text'" class="bubble"><span v-for="(part, partIndex) in messageParts(m.content, m.mentions)" :key="partIndex" :class="{ 'mention-text': part.userID, 'mention-self': part.userID === me.id }">{{ part.text }}</span></div>
                   <a v-else-if="m.kind === 'image'" class="image-bubble" :href="`/api/files/${m.file_id}?download=1`" :download="m.file_name" :title="`下载 ${m.file_name}`"><img :src="`/api/files/${m.file_id}`" :alt="m.file_name" loading="lazy" @load="atBottom() && bottom()" /><span><Icon name="download" :size="14" />{{ m.file_name }}</span></a>
                   <a v-else class="file-bubble" :href="`/api/files/${m.file_id}?download=1`" :download="m.file_name"><span class="file-icon"><Icon name="file" :size="25" /></span><span><b>{{ m.file_name }}</b><small>{{ bytes(m.file_size) }} · 点击下载</small></span><Icon name="download" :size="17" /></a>
                   <span v-if="m.sender_id === me.id" class="message-receipt"><Icon name="check" :size="12" />{{ readCount(m) ? `${readCount(m)} 人已读` : '已发送' }}</span>
@@ -491,7 +594,19 @@ onBeforeUnmount(() => {
         <div v-if="upload" class="upload-progress"><Icon name="file" :size="16" /><span>{{ upload.name }}</span><progress :value="upload.percent" max="100"></progress><b>{{ upload.percent }}%</b></div>
         <div v-if="uploadRetry" class="upload-progress failed"><span>附件发送未确认：{{ uploadRetry.file.name }}</span><button class="text-button" @click="sendFile(uploadRetry.file, uploadRetry.cid, uploadRetry.clientID)">重试</button><button class="text-button" @click="uploadRetry = null">取消</button></div>
         <footer class="composer-area">
-          <div class="composer-box"><textarea ref="composer" v-model="draft" :placeholder="`发送消息到 ${current.name}…`" aria-label="消息内容" rows="2" maxlength="8000" @keydown.enter="onEnter" @paste="paste"></textarea><div class="composer-tools"><div><button class="icon-button" :disabled="!!upload" aria-label="发送图片或文件" title="图片或文件（最大 25 MB）" @click="fileInput?.click()"><Icon name="attach" /></button><span class="composer-hint">Enter 发送 · Shift + Enter 换行</span></div><button class="send-button" :disabled="!draft.trim()" @click="send">发送<Icon name="send" :size="16" /></button></div></div>
+          <div class="composer-box">
+            <div v-if="mentionOpen" class="mention-picker">
+              <div class="mention-heading"><b>提及成员</b><span>{{ mentionSearch?.query ? '按昵称或账号搜索' : '↑↓ 选择 · Enter 确认' }}</span></div>
+              <div id="mention-options" class="mention-options" role="listbox" aria-label="可提及的群成员">
+                <button v-for="(person, index) in mentionOptions" :id="`mention-option-${person.id}`" :key="person.id" class="mention-option" :class="{ active: selectedMention?.id === person.id }" role="option" :aria-selected="selectedMention?.id === person.id" tabindex="-1" @mousedown.prevent @mouseenter="mentionIndex = index" @click="chooseMention(person)">
+                  <span class="avatar small-avatar" :class="hue(person.id)">{{ avatar(person.nickname) }}</span><span class="mention-person"><b>{{ person.nickname }}</b><small>@{{ person.username }}</small></span><span class="mention-presence">{{ person.online ? '在线' : '离线' }}</span>
+                </button>
+                <p v-if="!mentionOptions.length" class="mention-empty" role="status">{{ !membersReady ? '正在加载群成员…' : '没有匹配的成员，试试昵称或账号' }}</p>
+              </div>
+            </div>
+            <textarea ref="composer" :value="draft" :placeholder="`发送消息到 ${current.name}${canMention ? '，输入 @ 提及成员' : ''}…`" aria-label="消息内容" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" :aria-expanded="mentionOpen" :aria-controls="mentionOpen ? 'mention-options' : undefined" :aria-activedescendant="mentionOpen && selectedMention ? `mention-option-${selectedMention.id}` : undefined" rows="2" maxlength="8000" @input="onDraftInput" @keydown="onComposerKey" @keyup="onComposerCursor" @click="updateMentionSearch" @blur="mentionSearch = null" @compositionstart="composing = true" @compositionend="composing = false; updateMentionSearch()" @paste="paste"></textarea>
+            <div class="composer-tools"><div><button class="icon-button" :disabled="!!upload" aria-label="发送图片或文件" title="图片或文件（最大 25 MB）" @click="fileInput?.click()"><Icon name="attach" /></button><button v-if="canMention" class="icon-button" aria-label="提及群成员" title="提及群成员" @mousedown.prevent @click="startMention"><Icon name="at" /></button><span class="composer-hint">{{ mentionedPeople ? `将提醒 ${mentionedPeople} 位成员 · Enter 发送` : 'Enter 发送 · Shift + Enter 换行' }}</span></div><button class="send-button" :disabled="!draft.trim() || composing" @click="send">发送<Icon name="send" :size="16" /></button></div>
+          </div>
           <p class="composer-note"><Icon name="lock" :size="11" />仅会话成员可访问消息和附件</p>
           <input ref="fileInput" type="file" class="visually-hidden" aria-label="选择文件" @change="pickFile" />
         </footer>
@@ -526,6 +641,7 @@ onBeforeUnmount(() => {
         <details><summary>修改密码</summary><label>当前密码<input v-model="profile.old_password" type="password" autocomplete="current-password" /></label><label>新密码<input v-model="profile.new_password" type="password" autocomplete="new-password" minlength="10" maxlength="72" placeholder="至少 10 位" /></label></details>
         <button class="primary wide" :disabled="busy">保存设置</button>
         <div class="settings-actions"><button type="button" class="text-button" @click="notifications"><Icon name="bell" :size="16" />开启通知</button><button type="button" class="text-button danger" @click="logout"><Icon name="logout" :size="16" />退出登录</button></div>
+        <div v-if="desktop?.checkUpdates" class="desktop-version"><span>桌面版 v{{ desktopUpdate?.currentVersion || '…' }}</span><button type="button" class="text-button" :disabled="desktopUpdate?.checking" @click="checkDesktopUpdate">{{ desktopUpdate?.checking ? '检查中…' : '检查更新' }}</button></div>
       </form>
       <template v-else-if="modal === 'connection'">
         <div class="connection-card"><span class="avatar mint"><Icon :name="networkMode.includes('Radmin') ? 'network' : 'cloud'" /></span><div><b>{{ networkMode }}</b><span>{{ location.origin }}</span></div><span class="status-dot"></span></div>
@@ -541,5 +657,6 @@ onBeforeUnmount(() => {
       </template>
     </section>
   </div>
-  <div v-if="toast" class="toast" role="status"><Icon name="info" :size="17" />{{ toast }}</div>
+  <div v-if="toast" class="toast" :class="{ 'mention-toast': toastKind === 'mention' }" role="status"><Icon name="info" :size="17" />{{ toast }}</div>
+  </div>
 </template>

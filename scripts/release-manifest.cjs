@@ -10,6 +10,7 @@ const files = [
   `${desktopDirectory}/win-unpacked/LinChat.exe`,
   'dist/server/linchat-windows-amd64.exe',
   'dist/server/linchat-linux-amd64',
+  'deploy/update-cloud.sh',
 ]
 ;(async () => {
   const artifacts = []
@@ -26,6 +27,6 @@ const files = [
   const desktop = { version, filename, bytes: installer.bytes, sha256: installer.sha256,
     url: `https://github.com/Lin-6499/ChatForPlay/releases/download/v${version}/${filename}` }
   fs.writeFileSync(path.join(root, 'desktop-release.json'), JSON.stringify(desktop, null, 2) + '\n')
-  fs.writeFileSync(path.join(root, 'dist', 'SHA256SUMS.txt'), artifacts.slice(0, 2).map(a => `${a.sha256}  ${path.basename(a.path)}`).join('\n') + '\n')
+  fs.writeFileSync(path.join(root, 'dist', 'SHA256SUMS.txt'), artifacts.filter(a => !a.path.includes('/win-unpacked/')).map(a => `${a.sha256}  ${path.basename(a.path)}`).join('\n') + '\n')
   console.log(JSON.stringify(manifest, null, 2))
 })().catch(e => { console.error(e); process.exitCode = 1 })
