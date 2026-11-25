@@ -76,6 +76,18 @@ async function main() {
     await sameAnchor(saved)
     pass('Journal anchor survives tab, chat and campaign round trips')
 
+    // Readiness may become true before a browser scroll-reset event is
+    // delivered. Preserve the saved anchor until the next restoration frame.
+    await page.locator(journal).evaluate(async el => {
+      el.dataset.scrollReady = 'false'
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+      el.scrollTop = 0
+      el.dataset.scrollReady = 'true'
+      el.dispatchEvent(new Event('scroll'))
+    })
+    await sameAnchor(saved)
+    pass('A scroll-reset event between asynchronous readiness and restoration cannot overwrite the saved position')
+
     await scroll(journal, 0)
     await page.getByRole('button', { name: '读取更早的记录', exact: true }).click()
     await page.waitForFunction(() => document.querySelectorAll('.game-entry').length > 80)

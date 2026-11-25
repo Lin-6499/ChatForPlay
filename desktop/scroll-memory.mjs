@@ -36,7 +36,10 @@ export function startScrollMemory(root = document) {
     persist(state)
   }
   function restore(el, state) {
-    if (!visible(el) || state.owner.dataset.scrollReady === 'false') return
+    if (!visible(el) || state.owner.dataset.scrollReady === 'false') {
+      state.restored = false
+      return
+    }
     const position = state.position
     if (position) {
       const anchor = position.anchor && [...el.querySelectorAll('[data-scroll-anchor]')].find(row => row.dataset.scrollAnchor === position.anchor)
@@ -46,6 +49,7 @@ export function startScrollMemory(root = document) {
         : position.y
     } else if (state.owner.hasAttribute('data-scroll-follow')) el.scrollTop = el.scrollHeight
     state.x = el.scrollLeft; state.y = el.scrollTop
+    state.restored = true
     // Don't replace a saved anchor while asynchronous content is still arriving.
     if (!position) capture(el, state)
   }
@@ -76,9 +80,12 @@ export function startScrollMemory(root = document) {
     for (const [el, config] of found) {
       let state = bindings.get(el)
       if (!state) {
-        state = { ...config, position: getScrollPosition(config.key), x: -1, y: -1, observed: new Set() }
+        state = { ...config, position: getScrollPosition(config.key), x: -1, y: -1, restored: false, observed: new Set() }
         state.scroll = () => {
           if (!visible(el) || state.owner.dataset.scrollReady === 'false' || state.owner.dataset.scrollKey !== state.ownerKey) return
+          // A remounted/previously hidden panel can emit scroll(0) before its
+          // first restoration frame. That is layout, not a new reading position.
+          if (!state.restored) return
           if (Math.abs(el.scrollTop - state.y) < 1 && Math.abs(el.scrollLeft - state.x) < 1) return
           capture(el, state); state.x = el.scrollLeft; state.y = el.scrollTop
         }
