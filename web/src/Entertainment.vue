@@ -4,6 +4,7 @@ import Icon from './Icon.vue'
 import DiceRoll from './DiceRoll.vue'
 import HostStream from './HostStream.vue'
 import CampaignLore from './CampaignLore.vue'
+import CampaignRecap from './CampaignRecap.vue'
 import AbilityChecks from './AbilityChecks.vue'
 import { phases, rulesets, modes, abilityNames, type Campaign, type Character, type GameEvent, type Turn, type Proposal, type AgentToken, type AISettings, type GameAPI, type GameUser, type DiceInput, type DiceReceipt } from './game-types'
 import './entertainment.css'
@@ -365,6 +366,7 @@ onBeforeUnmount(() => { stopped = true; requestGeneration++; clearInterval(timer
       <nav class="game-tabs" aria-label="战役内容"><button v-for="t in tabs" :key="t.id" :class="{ active: tab === t.id }" :disabled="busy" :aria-current="tab === t.id ? 'page' : undefined" @click="chooseTab(t.id)">{{ t.label }}</button></nav>
       <p v-if="error && !showCreate && !showAI && !showDice && !editCharacter" class="game-error" role="alert">{{ error }}<button class="text-button" @click="error = ''; refresh()">刷新</button></p>
       <template v-if="tab === 'journal'">
+        <CampaignRecap :key="current.id" :campaign-i-d="current.id" :api="api" :revision="current.version + revision" />
         <details class="game-scene" :open="!events.length"><summary><Icon name="book" :size="17" /><b>当前场景</b><span>{{ current.scene || '等待房主铺开第一幕' }}</span></summary><p>{{ current.scene || '房主可在主持台填写起始场景，再继续战役。' }}</p><div v-if="current.summary" class="game-summary"><h3>上次的故事</h3><p>{{ current.summary }}</p></div></details>
         <div v-if="pendingTurn?.status === 'failed' || (pendingTurn?.status === 'running' && Date.now() - pendingTurn.started_at > 180000)" class="game-turn-error" role="status"><div><b>主持暂未完成</b><p>{{ pendingTurn.error || '回合已超时，已掷骰结果会保留。' }}</p></div><template v-if="isOwner"><button class="game-button" :disabled="busy" @click="retry(pendingTurn)">重试</button><button class="text-button" :disabled="busy" @click="retry(pendingTurn, true)">跳过</button></template></div>
         <div ref="journal" class="game-journal" :data-scroll-key="scrollKey('journal')" :data-scroll-ready="journalReady" data-scroll-follow role="log" aria-label="战役日志">

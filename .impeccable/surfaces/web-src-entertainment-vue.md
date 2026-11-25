@@ -7,6 +7,12 @@ related_targets: ["web/src/entertainment.css","web/src/game-types.ts","web/src/D
 
 # Entertainment mode — existing LinChat surface
 
+## Progress and memory organization · 1.2.11
+
+Operate extension, same visual identity: chapter focus is an inline explicit action; progress is a field independent of archive. Pending memory suggestions sit behind a counted disclosure with authoritative source text, never mixed into saved facts. A collapsed read-only recap joins the journal, bounded to42vh so the composer remains reachable on mobile.
+
+Four new headless real-server scenarios plus eight incumbent lore, six realtime and thirteen entertainment scenarios pass. Backend tests verify chapter focus isolation, progress, recap filtering and atomic owner-confirmed suggestions with duplicate retry protection. Rendered review at1264/390/320 shows readable sources and reachable confirmation controls; the320px recap retains journal and composer. Mechanical detector: no findings. Verdict: ship, limited to phase1; phase2/3 are not claimed delivered.
+
 ## Script and durable memory extension · direction
 
 - Operate mode, existing visual identity unchanged. The user selected TXT/Markdown and pasted text, not PDF/Word.

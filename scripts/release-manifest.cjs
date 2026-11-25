@@ -24,8 +24,8 @@ const files = [
     artifacts.push({ path: file, bytes: fs.statSync(full).size, sha256: h.digest('hex') })
   }
   const manifest = { version, created: new Date().toISOString(), cloud: 'https://chat.linblog.site', artifacts,
-    verification: ['dist/verification/lore/results.json', 'dist/verification/lore/build-binding.json', 'dist/verification/realtime/results.json', 'dist/verification/entertainment-check-results.json'],
-    verificationScope: 'Headless real-server lore import/history/permissions/context, realtime/reconnect and entertainment regressions; packaged source/server binding. No visible client or installer launched.' }
+    verification: ['dist/verification/memory/results.json', 'dist/verification/memory/build-binding.json', 'dist/verification/lore/results.json', 'dist/verification/realtime/results.json', 'dist/verification/entertainment-check-results.json'],
+    verificationScope: 'Headless real-server chapter focus, progress, owner-confirmed memory, source recap and incumbent regressions; packaged source/server binding. No visible client or installer launched.' }
   fs.writeFileSync(path.join(root, 'dist', 'release-manifest.json'), JSON.stringify(manifest, null, 2))
   const installer = artifacts[0]
   const filename = path.basename(installer.path)

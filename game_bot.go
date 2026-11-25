@@ -305,10 +305,11 @@ func gameTools() []any {
 		gameTool("roll_dice", "需要随机结果时必须请求服务器掷骰。不能自创点数。", map[string]any{"formula": text("例如 1d20+5、2d6、2d20kh1+4；最多50颗"), "reason": text("此次检定目的")}, []string{"formula", "reason"}),
 		gameTool("finish_turn", "提交完整公开叙述及本回合的状态变化。不要替玩家决定行动。只修改当前事实，不改过去/背景/房规。", map[string]any{
 			"narration": text("对玩家说的公开剧情，中文；引用真实掷骰结果"), "scene": text("可选，更新后完整公开场景"),
-			"phase":        map[string]any{"type": "string", "enum": []string{"awaiting_action", "awaiting_roll"}},
-			"summary":      text("仅结束本次时填写：基于已发生事实的累计战役摘要，未解决线索与资源情况"),
-			"changes":      map[string]any{"type": "array", "items": change},
-			"reply_prompt": replyPromptSchema(),
+			"phase":              map[string]any{"type": "string", "enum": []string{"awaiting_action", "awaiting_roll"}},
+			"summary":            text("仅结束本次时填写：基于已发生事实的累计战役摘要，未解决线索与资源情况"),
+			"changes":            map[string]any{"type": "array", "items": change},
+			"reply_prompt":       replyPromptSchema(),
+			"memory_suggestions": memorySuggestionSchema(),
 		}, []string{"narration", "phase", "changes"}),
 	}, checkTools()...)
 }

@@ -27,7 +27,7 @@ import (
 //go:embed all:web/dist
 var assets embed.FS
 
-const serverVersion = "1.2.10"
+const serverVersion = "1.2.11"
 
 type config struct {
 	Addr, DataDir, PublicURL, Name string

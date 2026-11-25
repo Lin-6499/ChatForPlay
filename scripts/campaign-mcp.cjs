@@ -27,10 +27,15 @@ const outcome = {
   type: 'object', properties: {
     narration: string, phase: { type: 'string', enum: ['awaiting_action', 'awaiting_roll'] }, scene: string, summary: string,
     reply_prompt: replyPrompt,
+    memory_suggestions: { type: 'array', maxItems: 5, description: 'Optional proposed durable memories, based only on this completed narration. Owner confirmation is required; never include speculation or secrets.', items: {
+      type: 'object', properties: { kind: { type: 'string', enum: ['fact', 'npc', 'quest', 'clue'] }, title: { type: 'string', maxLength: 100 }, content: { type: 'string', maxLength: 2000 } },
+      required: ['kind', 'title', 'content'], additionalProperties: false,
+    } },
     changes: { type: 'array', items: { type: 'object', properties: { id: integer, hp: integer, conditions: string, inventory: string, resources: string }, required: ['id'], additionalProperties: false } },
   }, required: ['narration', 'phase', 'changes'], additionalProperties: false,
 }
 const tools = [
+  ['campaign_recap', 'Read a source-based public recap of saved summary, recent narration, unresolved objectives and confirmed facts. Does not generate or publish new canon.', 'GET', '/recap', {}],
   ['campaign_lore', 'Read campaign chapters, NPCs, quests, clues and durable facts maintained by the owner. Secret entries require explicit token secret permission. Never reveal secrets in public narration. Archived entries are not current facts.', 'GET', '/lore', {}],
   ['campaign_stream', 'Publish ONLY public narration generated so far as a temporary snapshot. Increase seq per lease; retry identical seq and content after network loss. This does not commit game state. Finish with campaign_complete. Never send reasoning, secrets or tool arguments.', 'POST', a => `/turns/${a.turn_id}/stream`, { turn_id: integer, lease: string, version: integer, seq: integer, narration: string }, ['turn_id', 'lease', 'version', 'seq', 'narration']],
   ['campaign_reply_prompt', 'Read the latest public reply choices. Players can always write their own reply; a host token cannot answer for them.', 'GET', '/reply-prompt', {}],

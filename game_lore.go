@@ -19,13 +19,17 @@ type gameLore struct {
 	InContext  bool   `json:"in_context"`
 	Version    int64  `json:"version"`
 	UpdatedAt  int64  `json:"updated_at"`
+	ChapterID  int64  `json:"chapter_id"`
+	Progress   string `json:"progress"`
 }
 
-const loreSelect = "SELECT id,kind,title,content,visibility,status,in_context,version,updated_at FROM campaign_lore"
+const loreSelect = `SELECT id,kind,title,content,visibility,status,in_context,version,updated_at,
+ COALESCE((SELECT chapter_id FROM campaign_lore_details WHERE entry_id=campaign_lore.id),0),
+ COALESCE((SELECT progress FROM campaign_lore_details WHERE entry_id=campaign_lore.id),'') FROM campaign_lore`
 
 func scanLore(row scanner) (gameLore, error) {
 	var l gameLore
-	err := row.Scan(&l.ID, &l.Kind, &l.Title, &l.Content, &l.Visibility, &l.Status, &l.InContext, &l.Version, &l.UpdatedAt)
+	err := row.Scan(&l.ID, &l.Kind, &l.Title, &l.Content, &l.Visibility, &l.Status, &l.InContext, &l.Version, &l.UpdatedAt, &l.ChapterID, &l.Progress)
 	return l, err
 }
 func (a *app) loreEntries(c campaign, secrets bool) ([]gameLore, error) {
@@ -59,7 +63,8 @@ func (a *app) gameLoreList(r *http.Request, g gameActor) (any, error) {
 func (a *app) gameLoreSave(r *http.Request, g gameActor) (any, error) {
 	var in struct {
 		gameOp
-		Entry gameLore `json:"entry"`
+		Entry        gameLore `json:"entry"`
+		SuggestionID int64    `json:"suggestion_id"`
 	}
 	if err := gameBody(r, &in); err != nil {
 		return nil, err
@@ -72,6 +77,9 @@ func (a *app) gameLoreSave(r *http.Request, g gameActor) (any, error) {
 	validKind := map[string]bool{"chapter": true, "npc": true, "quest": true, "clue": true, "fact": true}
 	if !validKind[l.Kind] || (l.Visibility != "public" && l.Visibility != "dm") || (l.Status != "active" && l.Status != "archived") {
 		return nil, gameFail(400, "资料分类、权限或状态无效")
+	}
+	if err := normalizeLoreProgress(&l); err != nil {
+		return nil, err
 	}
 	// Secrets are never injected into builtin public model requests.
 	if l.Visibility == "dm" {
@@ -86,6 +94,16 @@ func (a *app) gameLoreSave(r *http.Request, g gameActor) (any, error) {
 		}
 		if c.ActiveTurn != 0 {
 			return nil, gameFail(409, "主持正在处理回合，请完成或暂停接管后再修改资料")
+		}
+		if err := validateLoreChapter(tx, c, l); err != nil {
+			return nil, err
+		}
+		if in.SuggestionID != 0 {
+			var status string
+			err := tx.QueryRow("SELECT status FROM campaign_memory_suggestions WHERE id=? AND campaign_id=?", in.SuggestionID, c.ID).Scan(&status)
+			if err != nil || status != "pending" || l.ID != 0 {
+				return nil, gameFail(409, "记忆建议已处理或不属于本战役")
+			}
 		}
 		l.UpdatedAt = time.Now().UnixMilli()
 		if l.ID == 0 {
@@ -118,8 +136,27 @@ func (a *app) gameLoreSave(r *http.Request, g gameActor) (any, error) {
 				return nil, err
 			}
 		}
+		if _, err := tx.Exec(`INSERT INTO campaign_lore_details(entry_id,chapter_id,progress) VALUES(?,?,?)
+		  ON CONFLICT(entry_id) DO UPDATE SET chapter_id=excluded.chapter_id,progress=excluded.progress`, l.ID, l.ChapterID, l.Progress); err != nil {
+			return nil, err
+		}
+		// Do not hide a chapter that still groups public entries.
+		if l.Kind != "chapter" || l.Visibility != "public" {
+			var count int
+			if err := tx.QueryRow(`SELECT count(*) FROM campaign_lore_details d JOIN campaign_lore e ON e.id=d.entry_id WHERE d.chapter_id=? AND e.visibility='public'`, l.ID).Scan(&count); err != nil {
+				return nil, err
+			}
+			if count > 0 {
+				return nil, gameFail(409, "此章节仍有关联的公开资料，请先调整关联")
+			}
+		}
 		if _, err := tx.Exec("INSERT INTO campaign_lore_history(entry_id,version,actor_id,document,created_at) VALUES(?,?,?,?,?)", l.ID, l.Version, g.ID, gameJSON(l), l.UpdatedAt); err != nil {
 			return nil, err
+		}
+		if in.SuggestionID != 0 {
+			if _, err := tx.Exec("UPDATE campaign_memory_suggestions SET status='accepted',entry_id=? WHERE id=? AND campaign_id=?", l.ID, in.SuggestionID, c.ID); err != nil {
+				return nil, err
+			}
 		}
 		if _, err := tx.Exec("UPDATE campaigns SET version=version+1,updated_at=? WHERE id=?", l.UpdatedAt, c.ID); err != nil {
 			return nil, err

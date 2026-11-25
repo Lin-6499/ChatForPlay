@@ -158,12 +158,13 @@ type gameCharacterChange struct {
 	Resources  *string `json:"resources,omitempty"`
 }
 type gameOutcome struct {
-	ReplyPrompt *gameReplyPrompt      `json:"reply_prompt,omitempty"`
-	Narration   string                `json:"narration"`
-	Scene       *string               `json:"scene,omitempty"`
-	Phase       string                `json:"phase"`
-	Summary     string                `json:"summary,omitempty"`
-	Changes     []gameCharacterChange `json:"changes"`
+	MemorySuggestions []memorySuggestionInput `json:"memory_suggestions,omitempty"`
+	ReplyPrompt       *gameReplyPrompt        `json:"reply_prompt,omitempty"`
+	Narration         string                  `json:"narration"`
+	Scene             *string                 `json:"scene,omitempty"`
+	Phase             string                  `json:"phase"`
+	Summary           string                  `json:"summary,omitempty"`
+	Changes           []gameCharacterChange   `json:"changes"`
 }
 type gameCompleteInput struct {
 	gameOp
@@ -281,6 +282,9 @@ func (a *app) completeGame(cid, turnID int64, g gameActor, in gameCompleteInput)
 		}
 		id, err := gameEvent(tx, c, c.BotID, eventKind, "public", 0, content, payload)
 		if err != nil {
+			return nil, err
+		}
+		if err = saveMemorySuggestions(tx, c, turnID, id, o.MemorySuggestions); err != nil {
 			return nil, err
 		}
 		_, err = tx.Exec("UPDATE campaigns SET scene=?,summary=?,phase=?,active_turn=0,version=version+1,updated_at=? WHERE id=?", c.Scene, c.Summary, o.Phase, time.Now().UnixMilli(), cid)

@@ -1,14 +1,20 @@
 <script setup lang="ts">
 import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, ref, watch } from 'vue'
 import type { Campaign, GameAPI } from './game-types'
-type Entry = { id: number; kind: string; title: string; content: string; visibility: string; status: string; in_context: boolean; version: number; updated_at: number }
+type Entry = { id: number; kind: string; title: string; content: string; visibility: string; status: string; in_context: boolean; version: number; updated_at: number; chapter_id: number; progress: string }
+type Suggestion = { id: number; event_id: number; turn_id: number; status: string; source_content: string; suggestion: { kind: string; title: string; content: string } }
 const props = defineProps<{ campaign: Campaign; api: GameAPI; owner: boolean; revision: number }>()
 const emit = defineEmits<{ changed: [] }>()
 const kinds: Record<string, string> = { chapter: '剧本章节', npc: '人物 / NPC', quest: '任务', clue: '线索', fact: '长期事实' }
 const entries = ref<Entry[]>([]), history = ref<Entry[]>([])
+const suggestions = ref<Suggestion[]>([]), suggestionID = ref(0), focusChapter = ref(0)
+const progressLabels: Record<string, string> = { not_started: '未开始', in_progress: '进行中', completed: '已完成', failed: '未达成', undiscovered: '未发现', discovered: '已发现', resolved: '已解决' }
+const chapterOptions = computed(() => entries.value.filter(e => e.kind === 'chapter' && e.status === 'active'))
+const pendingSuggestions = computed(() => suggestions.value.filter(e => e.status === 'pending'))
+const progressOptions = computed(() => draft.value.kind === 'quest' ? ['not_started', 'in_progress', 'completed', 'failed'] : draft.value.kind === 'clue' ? ['undiscovered', 'discovered', 'resolved'] : [])
 const search = ref(''), kind = ref(''), archived = ref(false)
 const loading = ref(true), busy = ref(false), error = ref(''), notice = ref(''), editing = ref(false)
-const fresh = (): Entry => ({ id: 0, kind: 'chapter', title: '', content: '', visibility: 'dm', status: 'active', in_context: false, version: 0, updated_at: 0 })
+const fresh = (): Entry => ({ id: 0, kind: 'chapter', title: '', content: '', visibility: 'dm', status: 'active', in_context: false, version: 0, updated_at: 0, chapter_id: 0, progress: '' })
 const draft = ref<Entry>(fresh()), baseline = ref(''), titleInput = ref<HTMLInputElement>()
 const dirty = computed(() => editing.value && JSON.stringify(draft.value) !== baseline.value)
 const selected = ref<Entry | null>(null), discardTarget = ref<Entry | 'new' | null>(null)
@@ -31,9 +37,12 @@ const operations = new Map<string, string>()
 async function load() {
   const gen = ++generation
   try {
-    const data = await props.api<Entry[]>(`/v1/campaigns/${props.campaign.id}/lore`)
+    const [data, proposed] = await Promise.all([
+      props.api<Entry[]>(`/v1/campaigns/${props.campaign.id}/lore`),
+      props.owner ? props.api<Suggestion[]>(`/v1/campaigns/${props.campaign.id}/memory-suggestions`) : Promise.resolve([]),
+    ])
     if (!stopped && gen === generation) {
-      entries.value = data; error.value = ''
+      entries.value = data; suggestions.value = proposed; error.value = ''
       if (!editing.value && selected.value) selected.value = data.find(e => e.id === selected.value!.id) || null
     }
   } catch (e) { if (gen === generation) error.value = e instanceof Error ? e.message : '资料暂时无法读取，请重试' }
@@ -42,7 +51,7 @@ async function load() {
 async function open(entry: Entry | 'new', discard = false) {
   if (busy.value) return
   if (dirty.value && !discard) { discardTarget.value = entry; return }
-  discardTarget.value = null; error.value = ''; notice.value = ''; history.value = []
+  discardTarget.value = null; error.value = ''; notice.value = ''; history.value = []; suggestionID.value = 0
   selected.value = entry === 'new' ? null : entry
   draft.value = entry === 'new' ? fresh() : { ...entry }
   baseline.value = JSON.stringify(draft.value); editing.value = props.owner
@@ -51,13 +60,13 @@ async function open(entry: Entry | 'new', discard = false) {
 async function save() {
   if (busy.value || !props.owner || props.campaign.active_turn || stale.value) return
   busy.value = true; error.value = ''; notice.value = ''
-  const body = { version: props.campaign.version, entry: { ...draft.value, in_context: draft.value.visibility === 'public' && draft.value.in_context } }
+  const body = { version: props.campaign.version, suggestion_id: suggestionID.value, entry: { ...draft.value, in_context: draft.value.visibility === 'public' && draft.value.in_context } }
   const fingerprint = JSON.stringify(body)
   if (!operations.has(fingerprint)) operations.set(fingerprint, crypto.randomUUID())
   try {
     const result = await props.api<{ entry: Entry }>(`/v1/campaigns/${props.campaign.id}/lore`, 'POST', { ...body, client_id: operations.get(fingerprint) })
     operations.delete(fingerprint)
-    draft.value = result.entry; baseline.value = JSON.stringify(result.entry); selected.value = result.entry
+    draft.value = result.entry; baseline.value = JSON.stringify(result.entry); selected.value = result.entry; suggestionID.value = 0
     notice.value = '已保存到战役资料'; emit('changed'); await load()
   } catch (e) { error.value = e instanceof Error ? e.message : '保存失败，文字已保留，请重试' }
   finally { busy.value = false }
@@ -88,6 +97,29 @@ function useHistory(e: Entry) {
   draft.value = { ...e, version: draft.value.version, updated_at: draft.value.updated_at }
   history.value = []; notice.value = '旧版本已载入编辑区，核对后保存会建立新版本。'
 }
+async function useSuggestion(s: Suggestion) {
+  if (dirty.value) { error.value = '请先保存或放弃当前修改，再载入记忆建议'; return }
+  await open('new')
+  draft.value = { ...fresh(), ...s.suggestion }
+  suggestionID.value = s.id
+  notice.value = `来自正式叙述 #${s.event_id} 的建议。请核对原文并编辑；保存前不会成为事实。默认按秘密资料保存。`
+}
+async function action(path: string, body: Record<string, unknown>) {
+  if (busy.value) return
+  busy.value = true; error.value = ''
+  const key = path + JSON.stringify(body)
+  if (!operations.has(key)) operations.set(key, crypto.randomUUID())
+  try {
+    await props.api(`/v1/campaigns/${props.campaign.id}/${path}`, 'POST', { ...body, client_id: operations.get(key) })
+    operations.delete(key); emit('changed'); await load()
+    notice.value = path === 'lore/focus' ? '本幕公开参考资料已切换；秘密未被公开。' : '记忆建议已忽略，不会写入事实。'
+  } catch (e) { error.value = e instanceof Error ? e.message : '操作失败，请重试' }
+  finally { busy.value = false }
+}
+watch(() => draft.value.kind, () => {
+  if (!progressOptions.value.includes(draft.value.progress)) draft.value.progress = progressOptions.value[0] || ''
+  if (draft.value.kind === 'chapter') draft.value.chapter_id = 0
+})
 watch(() => props.revision, () => { if (active && !busy.value) void load() })
 watch(() => props.campaign.version, () => { if (active && !busy.value) void load() })
 onActivated(() => { active = true; void load() })
@@ -99,6 +131,8 @@ onBeforeUnmount(() => { stopped = true; generation++ })
   <section class="campaign-lore">
     <div class="game-section-heading"><div><h3>剧本与记忆</h3><p>把章节、人物与重要事实留在战役里，由房主确认，不让推测变成既定事实。</p></div><button v-if="owner" class="game-button" :disabled="busy" @click="open('new')">新建资料</button></div>
     <p class="game-helper">公开且勾选“供主持参考”的有效资料会加入 AI 上下文，目前 {{ included.count }} 条。{{ included.omitted ? `另有 ${included.omitted} 条超出 24000 字预算；请取消无关条目后再主持。` : '秘密资料只供房主及获准的外部主持读取，不发送给内置公开模型。' }}</p>
+    <div v-if="owner" class="lore-focus"><label>本幕章节<select v-model.number="focusChapter" aria-label="本幕章节"><option :value="0">选择公开章节</option><option v-for="e in chapterOptions.filter(e => e.visibility === 'public')" :key="e.id" :value="e.id">{{ e.title }}</option></select></label><button class="game-button" :disabled="busy || !focusChapter || !!campaign.active_turn || dirty" @click="action('lore/focus', { version: campaign.version, chapter_id: focusChapter })">使用本幕资料</button><p class="game-helper">一次选择本章及其关联的有效公开资料，取消其他参考条目。{{ dirty ? '请先保存当前修改。' : '长期事实如需跨幕使用，可在切换后单独勾选。' }}</p></div>
+    <details v-if="owner" class="lore-suggestions"><summary>待确认的记忆建议 · {{ pendingSuggestions.length }} 条</summary><p class="game-helper">建议来自正式回合，不自动成为事实。载入编辑区后请核对原文，补充章节与进度，再决定是否保存。</p><p v-if="!pendingSuggestions.length" class="game-helper">暂无待确认建议。支持新版协议的主持可在完成回合时提供建议。</p><article v-for="s in pendingSuggestions" :key="s.id"><b>{{ s.suggestion.title }}</b><small>来源：回合 #{{ s.turn_id }} · 正式叙述 #{{ s.event_id }}</small><p class="lore-prose">{{ s.suggestion.content }}</p><details><summary>核对来源原文</summary><p class="lore-prose">{{ s.source_content }}</p></details><div class="game-actions"><button class="game-button" :disabled="busy" @click="useSuggestion(s)">核对并编辑</button><button class="text-button" :disabled="busy" @click="action(`memory-suggestions/${s.id}/reject`, {})">忽略此建议</button></div></article></details>
     <p v-if="error" class="game-error" role="alert">{{ error }} <button class="text-button" @click="load">重新读取资料</button></p>
     <p v-if="notice" class="game-helper" role="status">{{ notice }}</p>
     <div v-if="discardTarget" class="lore-confirm" role="alert"><p>当前有未保存的修改。是否放弃这些修改并打开另一条资料？</p><div class="game-actions"><button class="game-button" @click="open(discardTarget!, true)">放弃修改并继续</button><button class="text-button" @click="discardTarget = null">保留当前编辑</button></div></div>
@@ -109,12 +143,13 @@ onBeforeUnmount(() => { stopped = true; generation++ })
         <label class="game-check"><input v-model="archived" type="checkbox" />显示已归档资料</label>
         <p v-if="loading" class="game-helper" role="status">正在读取战役资料…</p>
         <p v-else-if="!filtered.length" class="game-helper">{{ entries.length ? '没有匹配的资料，请调整筛选。' : owner ? '还没有资料。新建一条，粘贴文字或导入 TXT / Markdown。' : '房主还没有共享公开资料。' }}</p>
-        <ul v-else class="lore-list" aria-label="战役资料列表"><li v-for="entry in filtered" :key="entry.id"><button type="button" :aria-current="draft.id === entry.id || selected?.id === entry.id ? 'true' : undefined" @click="open(entry)"><b>{{ entry.title }}</b><small>{{ kinds[entry.kind] }} · {{ entry.visibility === 'dm' ? '主持秘密' : '公开' }} · {{ entry.status === 'archived' ? '已归档' : entry.in_context ? '供主持参考' : '仅保存' }}</small></button></li></ul>
+        <ul v-else class="lore-list" aria-label="战役资料列表"><li v-for="entry in filtered" :key="entry.id"><button type="button" :aria-current="draft.id === entry.id || selected?.id === entry.id ? 'true' : undefined" @click="open(entry)"><b>{{ entry.title }}</b><small>{{ kinds[entry.kind] }} · {{ entry.visibility === 'dm' ? '主持秘密' : '公开' }} · {{ entry.status === 'archived' ? '已归档' : entry.in_context ? '供主持参考' : '仅保存' }}<template v-if="progressLabels[entry.progress]"> · {{ progressLabels[entry.progress] }}</template></small></button></li></ul>
       </div>
       <div class="lore-detail">
         <form v-if="editing && owner" class="game-form" @submit.prevent="save">
           <label>资料标题<input ref="titleInput" v-model="draft.title" maxlength="100" required /></label>
           <div class="game-form-row"><label>分类<select v-model="draft.kind" aria-label="分类"><option v-for="(label, value) in kinds" :key="value" :value="value">{{ label }}</option></select></label><label>可见范围<select v-model="draft.visibility" aria-label="可见范围"><option value="dm">主持秘密</option><option value="public">全体成员公开</option></select></label></div>
+          <div class="game-form-row"><label v-if="draft.kind !== 'chapter'">所属章节<select v-model.number="draft.chapter_id" aria-label="所属章节"><option :value="0">未关联章节</option><option v-for="e in chapterOptions.filter(e => draft.visibility === 'dm' || e.visibility === 'public')" :key="e.id" :value="e.id">{{ e.title }}</option></select></label><label v-if="progressOptions.length">剧情进度<select v-model="draft.progress" aria-label="剧情进度"><option v-for="value in progressOptions" :key="value" :value="value">{{ progressLabels[value] }}</option></select></label></div>
           <p v-if="draft.visibility === 'public'" class="game-helper lore-warning">保存后所有战役成员都能读取正文。已公开的内容无法从其他成员的记忆中撤回。</p>
           <label class="lore-import">导入文字文件<input type="file" accept=".txt,.md,.markdown,text/plain,text/markdown" @change="importText" /><small>UTF-8 · 最多 64 KB / 12000 字 · 先预览，再保存</small></label>
           <label>资料正文<textarea v-model="draft.content" rows="12" maxlength="12000" required placeholder="输入完整章节、NPC 信息、任务进度或经房主确认的长期事实。Markdown 以纯文本保存，不执行其中内容。"></textarea></label>
@@ -160,6 +195,15 @@ onBeforeUnmount(() => { stopped = true; generation++ })
 .lore-history { margin-top: 28px; border-top: 1px solid var(--line); padding-top: 16px; }
 .lore-history details { padding: 12px 0; border-bottom: 1px solid var(--line); }
 .lore-history summary { cursor: pointer; line-height: 1.7; overflow-wrap: anywhere; }
+.lore-focus { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin: 20px 0; }
+.lore-focus label { display: grid; gap: 8px; flex: 1; min-width: 140px; font-size: 12px; color: var(--muted); }
+.lore-focus select { min-width: 0; width: 100%; padding: 10px 12px; background: var(--field); color: var(--text); border: 1px solid var(--line); border-radius: 7px; }
+.lore-focus > p { flex-basis: 100%; }
+.lore-suggestions { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 14px 0; margin: 20px 0; }
+.lore-suggestions > summary { cursor: pointer; color: var(--warning); font-size: 13px; }
+.lore-suggestions article { padding: 16px 0; border-bottom: 1px solid var(--line); }
+.lore-suggestions article:last-child { border: 0; }
+.lore-suggestions small { display: block; color: var(--muted); margin-top: 6px; line-height: 1.6; }
 @media (max-width: 900px) {
   .lore-layout { grid-template-columns: minmax(0, 1fr); gap: 24px; }
   .lore-list { max-height: 220px; }

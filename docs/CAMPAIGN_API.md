@@ -501,3 +501,9 @@ JSON 请求体上限 64 KiB，未知字段会被拒绝；下文标为可省略�
 包含房主选中的有效公开资料，最多24000字，并通过 `omitted` 提示预算遗漏。
 秘密资料不在公开context中，令牌需秘密授权才可单独读取；保存仅限真人房主。
 完整字段与导入、版本规则见 [CAMPAIGN_LORE.md](CAMPAIGN_LORE.md)。
+
+## 剧情进度与记忆整理（1.2.11）
+
+资料新增chapter_id/progress，支持 `/lore/focus`、`/memory-suggestions`、`/recap`。
+完成回合可选提交 `outcome.memory_suggestions`，只有房主核对采用后才能成为长期事实。
+完整说明见 [MEMORY_PROGRESS.md](MEMORY_PROGRESS.md)。
