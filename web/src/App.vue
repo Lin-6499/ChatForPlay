@@ -4,6 +4,7 @@ import Icon from './Icon.vue'
 import Entertainment from './Entertainment.vue'
 import AppearanceSettings from './AppearanceSettings.vue'
 import { editMentions, mentionQuery, prepareText, messageParts, type Mention, type DraftMention } from './mentions'
+import { captureReadingPosition, readingPositionStore, restoreReadingPosition, type ReadingPosition } from './reading-position'
 
 interface User { id: number; username: string; nickname: string; admin: boolean; online: boolean; last_read?: number }
 interface Conversation { id: number; kind: string; name: string; owner_id: number; member_count: number; last_id: number; last_at: number; preview: string; unread: number; last_read: number; unread_mentions?: number }
@@ -24,10 +25,11 @@ const profile = ref({ nickname: '', old_password: '', new_password: '' })
 const query = ref(''), directoryQuery = ref(''), groupName = ref(''), selectedUsers = ref<number[]>([])
 const draft = ref(''), modal = ref<Modal>(''), showMobileChat = ref(false), showDetails = ref(false)
 const moreHistory = ref(false), loadingHistory = ref(false), toast = ref(''), connection = ref('连接中')
+const moreRecent = ref(false)
 const toastKind = ref('')
 const inviteUses = ref(10), inviteLink = ref(''), upload = ref<{ name: string; percent: number } | null>(null)
 const uploadRetry = ref<{ file: File; cid: number; clientID: string } | null>(null)
-const messageList = ref<HTMLElement>(), composer = ref<HTMLTextAreaElement>(), fileInput = ref<HTMLInputElement>()
+const messageList = ref<HTMLElement>(), messageContent = ref<HTMLElement>(), composer = ref<HTMLTextAreaElement>(), fileInput = ref<HTMLInputElement>()
 const connectionURL = ref(''), connectionLabel = ref(''), recentServers = ref<{ name: string; url: string }[]>([])
 const dragging = ref(false)
 const entertainment = ref(/^#(?:entertainment|campaign=\d+)$/.test(location.hash)), gameRevision = ref(0)
@@ -115,8 +117,63 @@ function mergeMessages(items: Message[]) {
   pending.value = pending.value.filter(p => !acknowledgements.has(p.client_id))
   savePending()
 }
-function atBottom() { const e = messageList.value; return !e || e.scrollHeight - e.scrollTop - e.clientHeight < 140 }
-async function bottom() { await nextTick(); const e = messageList.value; if (e) e.scrollTop = e.scrollHeight }
+const readingPositions = readingPositionStore()
+let readingPosition: ReadingPosition | undefined, historyReady = false, appliedScrollTop = -1
+let positionTimer: ReturnType<typeof setTimeout> | undefined, messageResize: ResizeObserver | undefined
+function persistReadingPosition() {
+  clearTimeout(positionTimer)
+  if (me.value && currentID.value && readingPosition && historyReady) readingPositions.set(me.value.id, currentID.value, readingPosition)
+}
+function rememberReadingPosition() {
+  const list = messageList.value
+  if (!historyReady || loadingHistory.value || !list?.clientHeight) return
+  readingPosition = captureReadingPosition(list, !moreRecent.value)
+}
+function saveReadingPosition() { rememberReadingPosition(); persistReadingPosition() }
+function applyReadingPosition() {
+  const list = messageList.value
+  if (!historyReady || loadingHistory.value || !list?.clientHeight || !readingPosition) return
+  restoreReadingPosition(list, readingPosition)
+  appliedScrollTop = list.scrollTop
+}
+function onMessageScroll() {
+  const list = messageList.value
+  if (!list?.clientHeight || loadingHistory.value || !historyReady) return
+  if (Math.abs(list.scrollTop - appliedScrollTop) > 1) {
+    rememberReadingPosition()
+    appliedScrollTop = list.scrollTop
+    clearTimeout(positionTimer)
+    positionTimer = setTimeout(persistReadingPosition, 200)
+  }
+  void markRead()
+}
+function atBottom() {
+  const e = messageList.value
+  return historyReady && !loadingHistory.value && !moreRecent.value && !!e?.clientHeight && e.scrollHeight - e.scrollTop - e.clientHeight <= 24
+}
+function followingLatest() { return historyReady && !loadingHistory.value && !moreRecent.value && readingPosition?.bottom === true }
+async function bottom(version = selectionVersion) {
+  await nextTick()
+  if (version !== selectionVersion || moreRecent.value || !historyReady) return
+  readingPosition = { messageID: messages.value.at(-1)?.id || 0, offset: 0, bottom: true }
+  applyReadingPosition(); persistReadingPosition()
+}
+// Images, wrapping, window resizing and re-mounting after Entertainment all keep
+// the same message anchor. Hidden mobile panels must not overwrite it with 0.
+watch([messageList, messageContent], () => {
+  messageResize?.disconnect()
+  if (!messageList.value || !messageContent.value) return
+  messageResize = new ResizeObserver(() => { applyReadingPosition(); void markRead() })
+  messageResize.observe(messageList.value)
+  messageResize.observe(messageContent.value)
+  applyReadingPosition()
+}, { flush: 'post' })
+watch([entertainment, showMobileChat], async () => {
+  saveReadingPosition()
+  await nextTick()
+  applyReadingPosition()
+  void markRead()
+})
 async function refreshConversations() {
   conversations.value = await api<Conversation[]>('/conversations')
   document.title = `${totalUnread.value ? `(${totalUnread.value}) ` : ''}LinChat · 让交流近一点`
@@ -138,49 +195,119 @@ async function loadMembers(cid = currentID.value) {
 }
 async function selectConversation(c: Conversation, reveal = true) {
   if (toastKind.value === 'mention') { toast.value = ''; clearTimeout(toastTimer) }
-  if (currentID.value === c.id) { showMobileChat.value = true; await nextTick(); await markRead(); return }
+  if (currentID.value === c.id && historyReady) { showMobileChat.value = true; await nextTick(); applyReadingPosition(); await markRead(); return }
+  saveReadingPosition()
   const version = ++selectionVersion
+  ++syncVersion
+  historyReady = false; appliedScrollTop = -1
+  readingPosition = me.value ? readingPositions.get(me.value.id, c.id) : undefined
   currentID.value = c.id; messages.value = []; members.value = []; draft.value = ''
   draftMentions.value = []; mentionSearch.value = null; membersReady.value = false
-  moreHistory.value = false; loadingHistory.value = true; showMobileChat.value = reveal; showDetails.value = false
+  moreHistory.value = false; moreRecent.value = false; loadingHistory.value = true; showMobileChat.value = reveal; showDetails.value = false
   try {
+    const saved = readingPosition
     const [page] = await Promise.all([api<Page>(`/conversations/${c.id}/messages`), loadMembers(c.id)])
     if (version !== selectionVersion) return
-    mergeMessages(page.messages); moreHistory.value = page.more
-    cursors.set(c.id, page.messages.at(-1)?.id || 0)
-    await bottom(); await markRead()
+    let items = page.messages, more = page.more
+    if (saved && !saved.bottom && saved.messageID && !items.some(m => m.id === saved.messageID)) {
+      // Jump directly to old history instead of downloading every intervening page.
+      const [before, after] = await Promise.all([
+        api<Page>(`/conversations/${c.id}/messages?before=${saved.messageID}`),
+        api<Page>(`/conversations/${c.id}/messages?after=${saved.messageID - 1}`),
+      ])
+      if (version !== selectionVersion) return
+      if (after.messages.some(m => m.id === saved.messageID)) {
+        items = [...before.messages, ...after.messages]; more = before.more; moreRecent.value = after.more
+      } else readingPosition = undefined
+    }
+    mergeMessages(items); moreHistory.value = more
+    cursors.set(c.id, items.at(-1)?.id || 0)
+    readingPosition ||= { messageID: items.at(-1)?.id || 0, offset: 0, bottom: true }
+    historyReady = true; loadingHistory.value = false
+    await nextTick()
+    if (version !== selectionVersion) return
+    applyReadingPosition(); persistReadingPosition(); await markRead()
+    await syncActive()
   } catch (e) { if (version === selectionVersion) notify(explain(e)) }
   finally { if (version === selectionVersion) loadingHistory.value = false }
 }
 async function older() {
-  const cid = currentID.value, first = messages.value[0]?.id
+  const cid = currentID.value, version = selectionVersion, first = messages.value[0]?.id
   if (!first || loadingHistory.value) return
-  const height = messageList.value?.scrollHeight || 0, top = messageList.value?.scrollTop || 0
+  rememberReadingPosition()
   loadingHistory.value = true
   try {
     const page = await api<Page>(`/conversations/${cid}/messages?before=${first}`)
-    if (cid !== currentID.value) return
+    if (version !== selectionVersion) return
     mergeMessages(page.messages); moreHistory.value = page.more
+  } catch (e) { if (version === selectionVersion) notify(explain(e)) }
+  finally {
+    if (version === selectionVersion) {
+      loadingHistory.value = false
+      await nextTick()
+      if (version === selectionVersion) {
+        applyReadingPosition()
+        void syncActive().catch(() => {})
+      }
+    }
+  }
+}
+async function newer() {
+  const cid = currentID.value, version = selectionVersion, last = messages.value.at(-1)?.id
+  if (!last || loadingHistory.value || !moreRecent.value) return
+  rememberReadingPosition(); loadingHistory.value = true
+  try {
+    const page = await api<Page>(`/conversations/${cid}/messages?after=${last}`)
+    if (version !== selectionVersion) return
+    mergeMessages(page.messages); moreRecent.value = page.more
+    cursors.set(cid, page.messages.at(-1)?.id || last)
+  } catch (e) { if (version === selectionVersion) notify(explain(e)) }
+  finally {
+    if (version === selectionVersion) {
+      loadingHistory.value = false
+      await nextTick()
+      if (version === selectionVersion) {
+        applyReadingPosition(); await markRead()
+        if (version === selectionVersion) void syncActive().catch(() => {})
+      }
+    }
+  }
+}
+async function latest() {
+  const cid = currentID.value, version = selectionVersion
+  if (!cid || loadingHistory.value) return false
+  rememberReadingPosition(); loadingHistory.value = true; ++syncVersion
+  try {
+    const page = await api<Page>(`/conversations/${cid}/messages`)
+    if (version !== selectionVersion) return false
+    messages.value = []; mergeMessages(page.messages)
+    moreHistory.value = page.more; moreRecent.value = false; historyReady = true
+    cursors.set(cid, page.messages.at(-1)?.id || 0)
+    readingPosition = { messageID: page.messages.at(-1)?.id || 0, offset: 0, bottom: true }
+    loadingHistory.value = false
     await nextTick()
-    if (messageList.value) messageList.value.scrollTop = top + messageList.value.scrollHeight - height
-  } catch (e) { notify(explain(e)) }
-  finally { loadingHistory.value = false }
+    if (version !== selectionVersion) return false
+    applyReadingPosition(); persistReadingPosition(); await markRead(); await syncActive()
+    return version === selectionVersion
+  } catch (e) { if (version === selectionVersion) notify(explain(e)); return false }
+  finally { if (version === selectionVersion) loadingHistory.value = false }
 }
 let syncVersion = 0
 async function syncActive() {
-  const cid = currentID.value, version = ++syncVersion
-  if (!cid) return
+  const cid = currentID.value, version = ++syncVersion, selection = selectionVersion
+  if (!cid || !historyReady || loadingHistory.value || moreRecent.value) return
   let cursor = cursors.get(cid) || 0, more = true
-  const scroll = atBottom()
-  while (more && currentID.value === cid && version === syncVersion) {
+  while (more && selection === selectionVersion && version === syncVersion) {
     const page = await api<Page>(`/conversations/${cid}/messages?after=${cursor}`)
-    if (currentID.value !== cid || version !== syncVersion) return
+    if (selection !== selectionVersion || version !== syncVersion || loadingHistory.value || moreRecent.value) return
+    const scroll = followingLatest()
     mergeMessages(page.messages)
     cursor = page.messages.at(-1)?.id || cursor
     cursors.set(cid, cursor)
     more = page.more && page.messages.length > 0
+    if (scroll) await bottom(selection)
   }
-  if (scroll) { await bottom(); await markRead() }
+  await markRead()
 }
 async function markRead() {
   if (entertainment.value || document.hidden || (!showMobileChat.value && matchMedia('(max-width:760px)').matches) || !atBottom() || !me.value) return
@@ -225,8 +352,8 @@ function connect() {
         const mentioned = mentionedMe(m)
         const readingHere = !entertainment.value && m.conversation_id === currentID.value && atBottom() && !document.hidden &&
           (showMobileChat.value || !matchMedia('(max-width:760px)').matches)
-        if (m.conversation_id === currentID.value) {
-          const scroll = atBottom(); mergeMessages([m])
+        if (m.conversation_id === currentID.value && historyReady && !loadingHistory.value && !moreRecent.value) {
+          const scroll = followingLatest(); mergeMessages([m])
           if (scroll) { await bottom(); await markRead() }
         } else if (m.sender_id === me.value?.id) {
           pending.value = pending.value.filter(p => p.client_id !== m.client_id); savePending()
@@ -279,8 +406,10 @@ function connect() {
   socket.onerror = () => socket.close()
 }
 function sessionExpired() {
+  saveReadingPosition(); ++selectionVersion; ++syncVersion; historyReady = false
   intentionalClose = true; clearTimeout(reconnectTimer); ws?.close(); ws = null
   me.value = null; currentID.value = 0; messages.value = []; error.value = '登录已过期，请重新登录'
+  cursors.clear(); readSent.clear()
 }
 async function submitAuth() {
   if (busy.value) return
@@ -299,6 +428,9 @@ async function send() {
   const { content, mentions } = prepareText(draft.value, draftMentions.value)
   if (!content || !currentID.value || !me.value) return
   if (Array.from(content).length > 4000) { notify('每条消息最多 4000 个字符'); return }
+  const version = selectionVersion
+  if (moreRecent.value && !(await latest())) return
+  if (version !== selectionVersion) return
   pending.value.push({ client_id: uid(), conversation_id: currentID.value, content, mentions, created_at: Date.now() })
   draft.value = ''; draftMentions.value = []; mentionSearch.value = null; savePending(); await bottom()
   await flushPending()
@@ -313,8 +445,10 @@ async function flushPending() {
         const m = await api<Message>(`/conversations/${p.conversation_id}/messages`, 'POST', {
           client_id: p.client_id, content: p.content, ...(p.mentions?.length ? { mentions: p.mentions } : {}),
         })
-        const scroll = atBottom()
-        mergeMessages([m]); scheduleRefresh()
+        const scroll = m.conversation_id === currentID.value && followingLatest()
+        if (m.conversation_id === currentID.value && !moreRecent.value && !loadingHistory.value) mergeMessages([m])
+        else { pending.value = pending.value.filter(item => item.client_id !== m.client_id); savePending() }
+        scheduleRefresh()
         if (scroll) { await bottom(); await markRead() }
       } catch (e) {
         const entry = pending.value.find(x => x.client_id === p.client_id)
@@ -414,7 +548,12 @@ async function sendFile(file: File, cid = currentID.value, clientID = uid()) {
       }
       const body = new FormData(); body.append('file', file); xhr.send(body)
     })
-    mergeMessages([m]); scheduleRefresh(); await bottom(); await markRead()
+    scheduleRefresh()
+    if (cid === currentID.value) {
+      if (moreRecent.value && !(await latest())) return
+      if (cid !== currentID.value) return
+      mergeMessages([m]); await bottom(); await markRead()
+    }
   } catch (e) { uploadRetry.value = { file, cid, clientID }; notify(explain(e)) }
   finally { upload.value = null; if (fileInput.value) fileInput.value.value = '' }
 }
@@ -480,6 +619,7 @@ async function saveProfile() {
 async function logout() {
   try {
     await api('/auth/logout', 'POST', {})
+    saveReadingPosition(); ++selectionVersion; ++syncVersion; historyReady = false
     intentionalClose = true; clearTimeout(reconnectTimer); ws?.close(); ws = null
     me.value = null; currentID.value = 0; messages.value = []; pending.value = []; modal.value = ''
     cursors.clear(); readSent.clear(); authMode.value = 'login'
@@ -502,6 +642,7 @@ async function notifications() {
   notify(permission === 'granted' ? '已开启系统消息通知' : '可在浏览器网站设置中管理通知权限')
 }
 function onVisible() {
+  if (document.hidden) saveReadingPosition()
   if (!document.hidden && me.value) void Promise.all([syncActive(), refreshConversations()]).catch(() => {})
 }
 async function openCampaignChat(cid: number) {
@@ -529,12 +670,16 @@ onMounted(async () => {
   ready.value = true
   document.addEventListener('visibilitychange', onVisible)
   document.addEventListener('keydown', onModalKey)
+  window.addEventListener('pagehide', saveReadingPosition)
 })
 onBeforeUnmount(() => {
+  saveReadingPosition(); ++selectionVersion; ++syncVersion
+  messageResize?.disconnect(); clearTimeout(positionTimer)
   offUpdate?.()
   intentionalClose = true; ws?.close(); clearTimeout(reconnectTimer); clearTimeout(refreshTimer); clearTimeout(toastTimer)
   document.removeEventListener('visibilitychange', onVisible)
   document.removeEventListener('keydown', onModalKey)
+  window.removeEventListener('pagehide', saveReadingPosition)
 })
 </script>
 
@@ -622,7 +767,8 @@ onBeforeUnmount(() => {
         </header>
         <div v-if="connection !== '实时在线'" class="connection-banner"><span class="spinner"></span>{{ connection }}，待发送消息会保留在此设备上。<button class="text-button" @click="flushPending">重试发送</button></div>
         <div class="chat-body">
-          <div ref="messageList" class="message-list" role="log" aria-label="聊天记录" @scroll.passive="markRead">
+          <div ref="messageList" class="message-list" role="log" aria-label="聊天记录" :aria-busy="loadingHistory" @scroll.passive="onMessageScroll">
+            <div ref="messageContent" :class="{ 'empty-message-flow': !messages.length && !pendingHere.length }">
             <button v-if="moreHistory" class="history-button" :disabled="loadingHistory" @click="older">{{ loadingHistory ? '加载中…' : '查看更早的消息' }}</button>
             <div v-if="!messages.length && !pendingHere.length" class="chat-welcome"><span class="welcome-icon"><Icon name="chat" :size="30" /></span><h3>{{ loadingHistory ? '正在加载对话…' : '对话，从一句你好开始' }}</h3><p>{{ current.kind === 'lobby' ? '这里是大家的公共空间，打个招呼吧。' : '文字、图片、文件，让想法自由流动。' }}</p><span class="welcome-rule"></span></div>
             <template v-for="(m, i) in messages" :key="m.id">
@@ -631,13 +777,18 @@ onBeforeUnmount(() => {
                 <span v-if="m.sender_id !== me.id" class="avatar small-avatar" :class="hue(m.sender_id)">{{ avatar(m.sender_name) }}</span>
                 <div class="message-content"><div class="message-meta"><b>{{ m.sender_id === me.id ? '我' : m.sender_name }}</b><time>{{ time(m.created_at) }}</time><span v-if="mentionedMe(m)" class="mention-label">提到了你</span></div>
                   <div v-if="m.kind === 'text'" class="bubble"><span v-for="(part, partIndex) in messageParts(m.content, m.mentions)" :key="partIndex" :class="{ 'mention-text': part.userID, 'mention-self': part.userID === me.id }">{{ part.text }}</span></div>
-                  <a v-else-if="m.kind === 'image'" class="image-bubble" :href="`/api/files/${m.file_id}?download=1`" :download="m.file_name" :title="`下载 ${m.file_name}`"><img :src="`/api/files/${m.file_id}`" :alt="m.file_name" loading="lazy" @load="atBottom() && bottom()" /><span><Icon name="download" :size="14" />{{ m.file_name }}</span></a>
+                  <a v-else-if="m.kind === 'image'" class="image-bubble" :href="`/api/files/${m.file_id}?download=1`" :download="m.file_name" :title="`下载 ${m.file_name}`"><img :src="`/api/files/${m.file_id}`" :alt="m.file_name" loading="lazy" /><span><Icon name="download" :size="14" />{{ m.file_name }}</span></a>
                   <a v-else class="file-bubble" :href="`/api/files/${m.file_id}?download=1`" :download="m.file_name"><span class="file-icon"><Icon name="file" :size="25" /></span><span><b>{{ m.file_name }}</b><small>{{ bytes(m.file_size) }} · 点击下载</small></span><Icon name="download" :size="17" /></a>
                   <span v-if="m.sender_id === me.id" class="message-receipt"><Icon name="check" :size="12" />{{ readCount(m) ? `${readCount(m)} 人已读` : '已发送' }}</span>
                 </div>
               </article>
             </template>
+            <div v-if="moreRecent" class="history-actions">
+              <button class="history-button" :disabled="loadingHistory" @click="newer">{{ loadingHistory ? '加载中…' : '查看更新的消息' }}</button>
+              <button class="history-button" :disabled="loadingHistory" @click="latest">回到最新消息</button>
+            </div>
             <article v-for="p in pendingHere" :key="p.client_id" class="message own pending"><div class="message-content"><div class="message-meta"><b>我</b><time>{{ time(p.created_at) }}</time></div><div class="bubble">{{ p.content }}</div><div class="message-receipt" :class="{ failed: p.error }"><template v-if="p.error"><span>{{ p.error }}</span><button @click="retry(p)">重试</button><button @click="discard(p)">取消</button></template><template v-else><span class="spinner"></span>发送中…</template></div></div></article>
+            </div>
           </div>
           <aside v-if="showDetails" class="details-panel"><div class="details-heading"><h3>会话成员</h3><button class="icon-button" aria-label="关闭成员列表" @click="showDetails = false"><Icon name="close" :size="16" /></button></div><button v-for="p in members" :key="p.id" class="member-row" :disabled="p.id === me.id" @click="direct(p)"><span class="avatar small-avatar" :class="hue(p.id)">{{ avatar(p.nickname) }}</span><span>{{ p.nickname }}<small>{{ p.online ? '在线' : '离线' }}</small></span><i class="status-dot" :class="{ offline: !p.online }"></i></button><button v-if="current.kind === 'group' && (current.owner_id === me.id || me.admin)" class="text-button add-members" @click="openModal('addMembers')"><Icon name="plus" :size="16" />添加成员</button></aside>
         </div>

@@ -100,6 +100,9 @@ func (a *app) gameCharacterSave(r *http.Request, g gameActor) (any, error) {
 		if err := gameVersion(c, in.Version); err != nil {
 			return nil, err
 		}
+		if err := pendingCharacterCheck(tx, c.ID, ch.ID); err != nil {
+			return nil, err
+		}
 		var n int
 		if tx.QueryRow("SELECT COUNT(*) FROM members WHERE conversation_id=? AND user_id=? AND user_id<>?", c.ConversationID, ch.UserID, c.BotID).Scan(&n) != nil || n != 1 {
 			return nil, gameFail(400, "角色必须属于本战役的真人成员")
@@ -258,7 +261,11 @@ func (a *app) gamePublicContext(c campaign) (any, error) {
 		return nil, err
 	}
 	// Public generation deliberately never receives DM notes or private character fields.
-	return map[string]any{"state": c, "characters": chars, "events": events, "secret_policy": "这里只含公开资料；秘密通过单独授权接口访问，待公开的线索由房主批准为场景。"}, nil
+	checks, err := a.publicChecks(c.ID)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"state": c, "characters": chars, "events": events, "checks": checks, "check_rule": checkRule, "secret_policy": "这里只含公开资料；秘密通过单独授权接口访问，待公开的线索由房主批准为场景。"}, nil
 }
 func (a *app) gameContextHTTP(r *http.Request, g gameActor) (any, error) {
 	c, err := a.gameAccess(pathID(r, "id"), g)

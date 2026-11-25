@@ -3,6 +3,14 @@ const readline = require('node:readline')
 const { campaignClient } = require('./campaign-client.cjs')
 const string = { type: 'string' }, integer = { type: 'integer' }
 const operation = { client_id: { type: 'string', minLength: 16, maxLength: 80, description: 'Unique request ID. Reuse the same ID and input for network retries.' } }
+const effect = { type: 'object', properties: { description: string, hp_delta: integer, conditions: string, inventory: string, resources: string }, required: ['description', 'hp_delta'], additionalProperties: false }
+const grades = ['critical_success', 'great_success', 'success', 'minor_failure', 'failure', 'critical_failure']
+const checkProperties = {
+  character_id: integer, kind: { type: 'string', enum: ['ability', 'skill'] }, ability: { type: 'string', enum: ['str', 'dex', 'con', 'int', 'wis', 'cha'] },
+  skill: string, reason: string, bonus: integer, bonus_reason: string, dc: integer, cost: effect,
+  outcomes: { type: 'object', properties: Object.fromEntries(grades.map(grade => [grade, effect])), required: grades, additionalProperties: false }, offer: effect,
+}
+const checkRequired = ['character_id', 'kind', 'ability', 'reason', 'dc', 'cost', 'outcomes']
 const outcome = {
   type: 'object', properties: {
     narration: string, phase: { type: 'string', enum: ['awaiting_action', 'awaiting_roll'] }, scene: string, summary: string,
@@ -10,6 +18,10 @@ const outcome = {
   }, required: ['narration', 'phase', 'changes'], additionalProperties: false,
 }
 const tools = [
+  ['campaign_checks', 'Read locked ability/skill checks and server-computed results. Awaiting choices belong only to the character owner.', 'GET', '/checks', {}],
+  ['campaign_check_get', 'Read one check by ID.', 'GET', a => `/checks/${a.check_id}`, { check_id: integer }, ['check_id']],
+  ['campaign_prepare_check', 'Lock d20-graded-v1 house-rule ability/skill check before rolling. Bind action actor to character user_id. Declare DC, cost and all six outcomes; offer is an optional player-selected success cost. Not for attacks/saves/damage/death saves.', 'POST', '/checks', { ...operation, ...checkProperties, event_id: integer, version: integer, turn_id: integer, lease: string }, ['client_id', 'event_id', ...checkRequired]],
+  ['campaign_check_roll', 'Roll a locked check once and apply its fixed consequences. Repeated requests cannot reroll. Do not apply these resources again in complete; awaiting_choice must wait for the human player.', 'POST', a => `/checks/${a.check_id}/roll`, { ...operation, check_id: integer, turn_id: integer, lease: string }, ['client_id', 'check_id']],
   ['campaign_context', 'Read only the current public state, characters and recent journal. Never contains DM secrets.', 'GET', '/context', {}],
   ['campaign_characters', 'Read character sheets; private fields are returned only if this token explicitly has secret access.', 'GET', '/characters', {}],
   ['campaign_rules', 'Read the fixed ruleset, house rules and owner-provided authorized materials.', 'GET', '/rules', {}],
@@ -44,8 +56,9 @@ function start() {
         const [, , method, route, properties, required = []] = tool
         const args = rpc.params.arguments || {}
         if (typeof args !== 'object' || Array.isArray(args) || required.some(k => args[k] === undefined) || Object.keys(args).some(k => !(k in properties))) throw Error('Invalid tool arguments')
-        if (typeof route === 'function' && (!Number.isSafeInteger(args.turn_id) || args.turn_id <= 0)) throw Error('Invalid turn ID')
-        const body = { ...args }; if (typeof route === 'function') delete body.turn_id
+        const routeKey = 'check_id' in properties ? 'check_id' : 'turn_id'
+        if (typeof route === 'function' && (!Number.isSafeInteger(args[routeKey]) || args[routeKey] <= 0)) throw Error('Invalid route ID')
+        const body = { ...args }; if (typeof route === 'function') delete body[routeKey]
         try {
           const data = await request(typeof route === 'function' ? route(args) : route, method, method === 'GET' ? undefined : body)
           result = { content: [{ type: 'text', text: JSON.stringify(data) }] }
@@ -56,4 +69,4 @@ function start() {
   })
 }
 if (require.main === module) { try { start() } catch (e) { console.error(e.message); process.exitCode = 1 } }
-module.exports = { tools }
+module.exports = { tools, checkProperties, checkRequired }

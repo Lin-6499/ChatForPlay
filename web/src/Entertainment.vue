@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onActivated, onDeactivated, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Icon from './Icon.vue'
+import AbilityChecks from './AbilityChecks.vue'
 import { phases, rulesets, modes, abilityNames, type Campaign, type Character, type GameEvent, type Turn, type Proposal, type AgentToken, type AISettings, type GameAPI, type GameUser } from './game-types'
 import './entertainment.css'
 
@@ -18,7 +19,7 @@ const validRecipient = computed(() => privateRecipients.value.some(p => p.id ===
 const myCharacter = computed(() => characters.value.find(c => c.user_id === props.me.id))
 const pendingTurn = computed(() => [...turns.value].reverse().find(t => t.status !== 'done'))
 const tabs = computed(() => [
-  { id: 'journal', label: '冒险日志' }, { id: 'characters', label: '角色卡' }, { id: 'proposals', label: '设定提案' },
+  { id: 'journal', label: '冒险日志' }, { id: 'characters', label: '角色卡' }, { id: 'checks', label: '行动检定' }, { id: 'proposals', label: '设定提案' },
   ...(isOwner.value ? [{ id: 'host', label: '主持台' }, { id: 'agents', label: '智能体接入' }] : []),
 ])
 const showCreate = ref(false), showAI = ref(false), showDice = ref(false), editCharacter = ref<Character | null>(null)
@@ -262,6 +263,7 @@ onBeforeUnmount(() => { stopped = true; requestGeneration++; clearInterval(timer
             <div class="game-entry-meta"><b>{{ e.kind === 'narration' || e.kind === 'summary' ? '主持人' : e.actor }}</b><span>{{ ({ action: '行动', roll: '服务器掷骰', summary: '本次摘要', narration: '叙述', setting: '设定更新', request: '主持请求', whisper: '私密消息' } as Record<string,string>)[e.kind] || e.kind }}</span><span v-if="e.visibility !== 'public'" class="game-secret-label"><Icon name="lock" :size="12" />{{ e.visibility === 'dm' ? '主持秘密' : '仅双方与房主' }}</span><time>{{ dateTime(e.created_at) }}</time></div>
             <div v-if="e.payload.roll" class="game-dice-result"><Icon name="dice" :size="27" /><strong>{{ e.payload.roll.total }}</strong><div><b>{{ e.payload.roll.formula }}</b><p>{{ e.content.split('\n')[0].split(' · ')[0] }}</p><small>实际骰子 {{ e.payload.roll.dice.join('、') }} · 保留 {{ e.payload.roll.kept.join('、') }} · 修正 {{ e.payload.roll.modifier >= 0 ? '+' : '' }}{{ e.payload.roll.modifier }}</small></div></div>
             <p v-else class="game-entry-text">{{ e.content }}</p>
+            <button v-if="e.kind === 'check'" class="text-button" @click="chooseTab('checks')">查看检定与代价选择</button>
           </article>
         </div>
         <footer class="game-composer">
@@ -276,6 +278,7 @@ onBeforeUnmount(() => { stopped = true; requestGeneration++; clearInterval(timer
           <p v-if="!characters.length" class="game-empty-small">还没有角色卡。你和伙伴都可以为自己创建一个角色。</p>
           <div class="game-character-grid"><article v-for="ch in characters" :key="ch.id" class="game-character"><header><div><h3>{{ ch.name }}</h3><p>{{ ch.role }} · {{ ch.level }} 级<span v-if="ch.user_id === me.id"> · 我的角色</span></p></div><button v-if="isOwner || ch.user_id === me.id" class="text-button" @click="editCharacter = JSON.parse(JSON.stringify(ch))">编辑</button></header><div class="game-stats"><div><small>生命值</small><b>{{ ch.hp }}<span> / {{ ch.max_hp }}</span></b><meter :value="ch.hp" min="0" :max="ch.max_hp" :aria-label="`${ch.name} 生命值`"></meter></div><div><small>护甲等级</small><b>{{ ch.ac }}</b></div></div><dl class="game-abilities"><div v-for="(label, key) in abilityNames" :key="key"><dt>{{ label }}</dt><dd>{{ ch.abilities[key] }}</dd></div></dl><dl class="game-character-details"><div v-for="(label, key) in { conditions: '状态', inventory: '物品', resources: '法术与资源', background: '公开背景' }" :key="key"><dt>{{ label }}</dt><dd>{{ ch[key] || '尚未记录' }}</dd></div></dl></article></div>
         </template>
+        <AbilityChecks v-else-if="tab === 'checks'" :key="current.id" :campaign="current" :characters="characters" :events="events" :members="members" :me="me" :api="api" :revision="revision" @changed="refresh" />
         <template v-else-if="tab === 'proposals'">
           <div class="game-section-heading"><div><h3>先提案，再成为设定</h3><p>修改场景、房规和角色背景，由房主采纳后写入正式存档。</p></div></div>
           <form class="game-form" @submit.prevent="propose"><div class="game-form-row"><label>提案类型<select v-model="proposalForm.kind"><option value="scene">下一幕 / 公开线索</option><option value="house_rules">房规与规则资料</option><option value="background">角色背景</option></select></label><label v-if="proposalForm.kind === 'background'">角色<select v-model.number="proposalForm.character_id" required><option :value="0" disabled>选择角色</option><option v-for="ch in characters" :key="ch.id" :value="ch.id">{{ ch.name }}</option></select></label></div><label>建议内容<textarea v-model="proposalForm.content" rows="4" required maxlength="12000" placeholder="写下完整的新设定，以及变更理由。草稿只对提交者和房主可见。"></textarea></label><button class="game-button" :disabled="busy">提交提案</button></form>
@@ -323,7 +326,8 @@ onBeforeUnmount(() => { stopped = true; requestGeneration++; clearInterval(timer
         <div class="game-actions"><button class="primary" :disabled="busy">保存配置</button><button type="button" class="game-button" :disabled="busy || !ai.has_key" @click="testAI">{{ busy ? '处理中…' : '测试已保存的连接' }}</button></div>
       </form>
       <form v-else-if="showDice" class="game-form" @submit.prevent="roll">
-        <label>检定目的<input v-model="diceForm.reason" required maxlength="200" placeholder="例如：调查石门刻痕" /></label><label>骰式<input v-model="diceForm.formula" required maxlength="30" spellcheck="false" placeholder="1d20+5" /></label><p class="game-helper">普通：1d20+5 · 伤害：2d6+3<br />优势：2d20kh1+4 · 劣势：2d20kl1+4</p>
+        <p class="game-helper">这里是通用骰子，不计算分级房规。属性／技能检定请使用“行动检定”，先锁定 DC 与后果。</p>
+        <label>检定目的<input v-model="diceForm.reason" required maxlength="200" placeholder="例如：攻击或伤害掷骰" /></label><label>骰式<input v-model="diceForm.formula" required maxlength="30" spellcheck="false" placeholder="1d20+5" /></label><p class="game-helper">普通：1d20+5 · 伤害：2d6+3<br />优势：2d20kh1+4 · 劣势：2d20kl1+4</p>
         <label v-if="isOwner">可见范围<select v-model="diceForm.visibility"><option value="public">所有战役成员</option><option value="dm">仅主持秘密</option></select></label>
         <p class="game-helper">服务器产生随机点数并保存原始骰子与结果。重复提交同一请求不会重掷。</p><button class="primary wide" :disabled="busy">掷骰并记录<Icon name="dice" :size="18" /></button>
       </form>

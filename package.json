@@ -17,6 +17,8 @@
     "test:features": "node --test scripts/mentions.test.cjs scripts/updates.test.cjs scripts/campaign.test.cjs",
     "test:entertainment": "node scripts/entertainment-check.cjs",
     "test:appearance": "node --test scripts/theme.test.cjs",
+    "test:reading-position": "node scripts/reading-position-check.cjs",
+    "test:ability-checks": "node scripts/ability-checks-check.cjs",
     "campaign:mcp": "node scripts/campaign-mcp.cjs",
     "campaign:agent": "node scripts/campaign-agent.cjs",
     "release:manifest": "node scripts/release-manifest.cjs",

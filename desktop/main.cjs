@@ -215,7 +215,23 @@ app.on('before-quit', event => {
 app.on('window-all-closed', () => { if (quitting) app.quit() })
 app.whenReady().then(async () => {
   if (!gotLock) return
-  const { normalizeAppearance, normalizeColor } = await import('./theme.mjs')
+  const { normalizeAppearance, normalizeColor, appearanceTokens } = await import('./theme.mjs')
+  const readAppearance = () => {
+    try { return normalizeAppearance(JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'appearance.json'), 'utf8'))) }
+    catch { return normalizeAppearance(null) }
+  }
+  let windowAppearance = readAppearance()
+  const windowChrome = () => {
+    const tokens = appearanceTokens(windowAppearance)
+    return { enabled: process.platform === 'win32', color: tokens['--panel'], symbolColor: tokens['--panel-text'], height: 32, fullscreen: win?.isFullScreen() || false }
+  }
+  function publishWindowChrome() {
+    if (!win || win.isDestroyed()) return
+    const chrome = windowChrome()
+    win.setBackgroundColor(windowAppearance.background)
+    if (chrome.enabled) win.setTitleBarOverlay({ color: chrome.color, symbolColor: chrome.symbolColor, height: chrome.height })
+    win.webContents.send('window:chrome', chrome)
+  }
   app.setAppUserModelId('site.linblog.linchat')
   readProfiles()
   const partition = session.fromPartition('persist:linchat')
@@ -227,12 +243,15 @@ app.whenReady().then(async () => {
     contents === win?.webContents && permission === 'notifications' && requestingOrigin === selectedOrigin)
   win = new BrowserWindow({
     width: 1280, height: 850, minWidth: 820, minHeight: 600, show: false,
-    title: 'LinChat · 让交流近一点', backgroundColor: '#111615', icon: iconPath,
+    title: 'LinChat · 让交流近一点', backgroundColor: windowAppearance.background, icon: iconPath,
+    ...(process.platform === 'win32' ? { titleBarStyle: 'hidden', titleBarOverlay: { color: windowChrome().color, symbolColor: windowChrome().symbolColor, height: 32 } } : {}),
     autoHideMenuBar: true,
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false,
       sandbox: true, webSecurity: true, partition: 'persist:linchat', spellcheck: false },
   })
   win.on('close', event => { if (!quitting) { event.preventDefault(); win.hide() } })
+  win.on('enter-full-screen', publishWindowChrome)
+  win.on('leave-full-screen', publishWindowChrome)
   win.once('ready-to-show', showWindow)
   updater = createUpdater({
     currentVersion: app.getVersion(), fetchRelease,
@@ -307,6 +326,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('updates:state', event => { requireDesktopPage(event); return updater.getState() })
   ipcMain.handle('updates:check', event => { requireDesktopPage(event); return updater.check() })
   ipcMain.handle('updates:open', event => { requireDesktopPage(event); return updater.open() })
+  ipcMain.handle('window:chrome', event => { requireDesktopPage(event); return windowChrome() })
   ipcMain.handle('appearance:get', event => {
     requireDesktopPage(event)
     try { return normalizeAppearance(JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'appearance.json'), 'utf8'))) }
@@ -318,7 +338,8 @@ app.whenReady().then(async () => {
     const appearance = normalizeAppearance(value)
     fs.mkdirSync(app.getPath('userData'), { recursive: true })
     fs.writeFileSync(path.join(app.getPath('userData'), 'appearance.json'), JSON.stringify(appearance, null, 2), 'utf8')
-    win.setBackgroundColor(appearance.background)
+    windowAppearance = appearance
+    publishWindowChrome()
     return appearance
   })
   ipcMain.handle('launcher:state', event => {

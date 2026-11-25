@@ -247,7 +247,7 @@ func gameEvent(tx *sql.Tx, c campaign, actor int64, kind, visibility string, rec
 		return 0, err
 	}
 	id, _ := res.LastInsertId()
-	if visibility == "public" && (kind == "narration" || kind == "summary" || kind == "roll") {
+	if visibility == "public" && (kind == "narration" || kind == "summary" || kind == "roll" || kind == "check") {
 		_, err = tx.Exec(`INSERT INTO messages(conversation_id,sender_id,client_id,kind,content,created_at) VALUES(?,?,?,'text',?,?)`,
 			c.ConversationID, c.BotID, fmt.Sprintf("campaign-event-%d", id), content, time.Now().UnixMilli())
 	}
@@ -256,7 +256,13 @@ func gameEvent(tx *sql.Tx, c campaign, actor int64, kind, visibility string, rec
 
 func (a *app) registerGames(m *http.ServeMux) {
 	routes := map[string]func(*http.Request, gameActor) (any, error){
-		"GET /api/v1/campaigns": a.gameList, "POST /api/v1/campaigns": a.gameCreate,
+		"GET /api/v1/campaigns/{id}/checks":                 a.gameChecks,
+		"GET /api/v1/campaigns/{id}/checks/{check}":         a.gameChecks,
+		"POST /api/v1/campaigns/{id}/checks":                a.gamePrepareCheck,
+		"POST /api/v1/campaigns/{id}/checks/{check}/roll":   a.gameRollCheck,
+		"POST /api/v1/campaigns/{id}/checks/{check}/choose": a.gameChooseCheck,
+		"POST /api/v1/campaigns/{id}/checks/{check}/cancel": a.gameCancelCheck,
+		"GET /api/v1/campaigns":                             a.gameList, "POST /api/v1/campaigns": a.gameCreate,
 		"GET /api/v1/campaigns/{id}/state": a.gameState, "PATCH /api/v1/campaigns/{id}/state": a.gamePatchState,
 		"GET /api/v1/campaigns/{id}/context": a.gameContextHTTP, "GET /api/v1/campaigns/{id}/rules": a.gameRules,
 		"GET /api/v1/campaigns/{id}/characters": a.gameCharactersHTTP, "POST /api/v1/campaigns/{id}/characters": a.gameCharacterSave,
