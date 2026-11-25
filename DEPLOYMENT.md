@@ -10,12 +10,14 @@
 
 ## 1.2.1 自定义安装位置（桌面更新）
 
+- 已发布：[LinChat 1.2.1](https://github.com/Lin-6499/ChatForPlay/releases/tag/v1.2.1)，发行源码提交 `af640af`；7 个发行附件的大小和 SHA-256 均经 GitHub 确认。
 - Windows 安装器改为当前用户安装向导，支持“浏览”或输入目标目录；升级时默认显示已登记的安装位置。
 - `一键安装使用.cmd` 始终进入同版／新版安装向导，支持重新选择目录；`启动LinChat.cmd` 从 Windows 安装登记中识别程序路径并直接启动已安装的版本。
 - 安装器完成页控制是否运行；取消安装正常退出。安装包缓存位于 `%LOCALAPPDATA%\LinChat\downloads`，数据位于 `%APPDATA%\linchat-desktop`。
 - 安装包 `LinChat-Setup-1.2.1.exe`：107,176,264 字节；SHA-256：`7e31c054f54344016778fa62b06ead27d74ccf1971b56794a4fa5bd7cf7ce762`。
-- 已构建安装版与便携版；真实安装向导显示目录输入框、“浏览”和原安装路径。用户关闭了本次向导，本机安装版本仍为 1.2.0。截图和状态：`dist/verification/installer-directory.png`、`custom-installer-results.json`。
-- 打包 EXE 1.2.1 已通过启动、官方更新接口及云端 HTTPS 登录页检查。结果：`dist/verification/packaged-check-results.json`。
+- 已构建安装版与便携版；真实安装向导显示目录输入框、“浏览”和原安装路径。用户关闭了本次向导，本机安装版本仍为 1.2.0。截图和状态：`dist/verification/installer-1.2.1/installer-directory.png`、`custom-installer-results.json`。
+- 打包 EXE 1.2.1 已通过启动、官方更新接口及云端 HTTPS 登录页检查。结果：`dist/verification/installer-1.2.1/packaged-check-results.json`。
+- 已使用 Windows PowerShell 5.1 从正式地址完整下载 1.2.1 安装包，大小与 SHA-256 校验通过；正式更新接口向 1.2.0 提示升级，1.2.1 不重复提醒。结果：`dist/verification/installer-1.2.1/download-results.json`、`published-update-check.json`。
 - 本版更新桌面安装流程；内置及云端服务端为 1.2.0。
 
 ## 1.2.0 娱乐模式
