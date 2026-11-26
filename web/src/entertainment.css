@@ -45,7 +45,7 @@
 .game-scene > p, .game-summary p { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.9; font-size: 13px; padding-bottom: 16px; max-width: 72ch; }
 .game-summary { border-top: 1px solid var(--line); padding-top: 12px; }
 .game-summary h3 { font-size: 13px; margin-bottom: 6px; }
-.game-journal { flex: 1; overflow-y: auto; overflow-anchor: none; min-height: 0; padding: 28px 30px; overscroll-behavior: contain; }
+.game-journal { flex: 1; overflow-y: auto; overflow-anchor: none; min-height: min(160px, 25dvh); padding: 28px 30px; overscroll-behavior: contain; }
 .game-entry { margin: 0 auto 30px; max-width: 74ch; }
 .game-entry-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); line-height: 1.6; margin-bottom: 9px; }
 .game-entry-meta b { font-size: 12px; color: var(--text); }
@@ -238,6 +238,9 @@
 }
 .game-composer { display: grid; grid-template-rows: minmax(0, 1fr) auto auto auto; max-height: 45%; min-height: 160px; flex-shrink: 1; }
 .game-compose-fields { min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: 2px; }
+.game-context { min-height: 0; max-height: 30%; overflow-y: auto; flex-shrink: 1; }
+.game-context .game-scene { max-height: none; }
+.game-reply-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; font-size: 13px; }
 .game-quick-replies { display: grid; gap: 8px; padding-bottom: 12px; }
 .game-quick-replies > b { font-size: 13px; }
 .game-quick-replies > p, .game-reply-status { font-size: 12px; line-height: 1.6; color: var(--muted); }
@@ -253,6 +256,7 @@
 /* Height is the limiting dimension in a restored desktop window. Preserve
    reading space and the submit row before allowing secondary content to grow. */
 @media (max-height: 720px) {
+  .game-context .campaign-flow > summary, .game-context .campaign-recap > summary { padding-block: 6px; }
   .game-room-header { padding-block: 10px; }
   .game-room-title p { margin-top: 3px; }
   .game-state-strip { padding-block: 6px; flex-shrink: 0; }

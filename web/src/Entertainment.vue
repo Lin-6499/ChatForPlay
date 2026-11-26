@@ -368,9 +368,11 @@ onBeforeUnmount(() => { stopped = true; requestGeneration++; clearInterval(timer
       <nav class="game-tabs" aria-label="战役内容"><button v-for="t in tabs" :key="t.id" :class="{ active: tab === t.id }" :disabled="busy" :aria-current="tab === t.id ? 'page' : undefined" @click="chooseTab(t.id)">{{ t.label }}</button></nav>
       <p v-if="error && !showCreate && !showAI && !showDice && !editCharacter" class="game-error" role="alert">{{ error }}<button class="text-button" @click="error = ''; refresh()">刷新</button></p>
       <template v-if="tab === 'journal'">
+        <div class="game-context">
         <CampaignFlow :key="`flow-${current.id}`" :campaign="current" :api="api" :me="me" :members="members" :revision="revision" @changed="refresh" />
         <CampaignRecap :key="current.id" :campaign-i-d="current.id" :api="api" :revision="current.version + revision" />
         <details class="game-scene" :open="!events.length"><summary><Icon name="book" :size="17" /><b>当前场景</b><span>{{ current.scene || '等待房主铺开第一幕' }}</span></summary><p>{{ current.scene || '房主可在主持台填写起始场景，再继续战役。' }}</p><div v-if="current.summary" class="game-summary"><h3>上次的故事</h3><p>{{ current.summary }}</p></div></details>
+        </div>
         <div v-if="pendingTurn?.status === 'failed' || (pendingTurn?.status === 'running' && Date.now() - pendingTurn.started_at > 180000)" class="game-turn-error" role="status"><div><b>主持暂未完成</b><p>{{ pendingTurn.error || '回合已超时，已掷骰结果会保留。' }}</p></div><template v-if="isOwner"><button class="game-button" :disabled="busy" @click="retry(pendingTurn)">重试</button><button class="text-button" :disabled="busy" @click="retry(pendingTurn, true)">跳过</button></template></div>
         <div ref="journal" class="game-journal" :data-scroll-key="scrollKey('journal')" :data-scroll-ready="journalReady" data-scroll-follow role="log" aria-label="战役日志">
           <button v-if="canOlder && events.length" class="history-button" :disabled="busy" @click="older">读取更早的记录</button>
@@ -387,8 +389,7 @@ onBeforeUnmount(() => { stopped = true; requestGeneration++; clearInterval(timer
           <div class="game-compose-fields">
           <div v-if="replyError" class="game-reply-status" role="status">{{ replyError }}<button class="text-button" @click="loadReplyPrompt(current.id, requestGeneration)">重试</button></div>
           <section v-else-if="replyPrompt && composeKind === 'action'" class="game-quick-replies" aria-label="主持人快捷回复">
-            <small class="game-helper">对应主持叙述 #{{ replyPrompt.event_id }} · {{ replyPrompt.can_reply ? '待你提交，点击选项不会立即发送' : replyPrompt.answered ? '本组已回复' : '当前不可回复' }}</small>
-            <b>{{ replyPrompt.answered ? '你已回复这组问题' : replyPrompt.can_reply ? '主持人等你回复' : replyPrompt.target_user_id && replyPrompt.target_user_id !== me.id ? '等待指定玩家回复' : '等待主持人继续' }}</b>
+            <div class="game-reply-heading"><b>{{ replyPrompt.answered ? '你已回复这组问题' : replyPrompt.can_reply ? '主持人等你回复' : replyPrompt.target_user_id && replyPrompt.target_user_id !== me.id ? '等待指定玩家回复' : '等待主持人继续' }}</b><small class="game-helper">对应叙述 #{{ replyPrompt.event_id }}</small></div>
             <div v-if="replyPrompt.can_reply" class="game-reply-options">
               <button v-for="option in replyPrompt.options" :key="option.id" type="button" class="game-button" :disabled="busy" :aria-pressed="selectedReply?.eventID === replyPrompt.event_id && selectedReply?.optionID === option.id && draft === option.content" @click="chooseReply(option)">{{ option.label }}</button>
             </div>
