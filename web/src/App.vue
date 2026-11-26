@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Icon from './Icon.vue'
 import Entertainment from './Entertainment.vue'
+import Estate from './Estate.vue'
 import AppearanceSettings from './AppearanceSettings.vue'
 import { editMentions, mentionQuery, prepareText, messageParts, type Mention, type DraftMention } from './mentions'
 import { captureReadingPosition, readingPositionStore, restoreReadingPosition, type ReadingPosition } from './reading-position'
@@ -32,7 +33,9 @@ const uploadRetry = ref<{ file: File; cid: number; clientID: string } | null>(nu
 const messageList = ref<HTMLElement>(), messageContent = ref<HTMLElement>(), composer = ref<HTMLTextAreaElement>(), fileInput = ref<HTMLInputElement>()
 const connectionURL = ref(''), connectionLabel = ref(''), recentServers = ref<{ name: string; url: string }[]>([])
 const dragging = ref(false)
-const entertainment = ref(/^#(?:entertainment|campaign=\d+)$/.test(location.hash)), gameRevision = ref(0)
+const entertainment = ref(/^#(?:entertainment|campaign=\d+|estate(?:=\d+)?)$/.test(location.hash)), gameRevision = ref(0)
+const estateMode = ref(/^#estate/.test(location.hash))
+function openEstate() { estateMode.value = true; window.history.replaceState(null, '', '#estate') }
 const draftMentions = ref<DraftMention[]>([]), mentionSearch = ref<ReturnType<typeof mentionQuery>>(null)
 const mentionIndex = ref(0), composing = ref(false), membersReady = ref(false)
 const canMention = computed(() => current.value?.kind === 'group' || current.value?.kind === 'lobby')
@@ -348,6 +351,7 @@ function connect() {
         for (const p of pending.value) if (p.retryable) p.error = ''
         await flushPending()
       } else if (event.type === 'message') {
+        window.dispatchEvent(new Event('linchat:estate-changed'))
         const m = event.message as Message
         const alreadyReceived = messages.value.some(item => item.id === m.id)
         const mentioned = mentionedMe(m)
@@ -383,6 +387,9 @@ function connect() {
           if (p) p.last_read = Math.max(p.last_read || 0, event.last_read)
         }
         if (event.user_id === me.value?.id) scheduleRefresh()
+      } else if (event.type === 'estate.changed') {
+        window.dispatchEvent(new Event('linchat:estate-changed'))
+        scheduleRefresh()
       } else if (event.type === 'campaign.stream') {
         window.dispatchEvent(new CustomEvent('linchat:campaign-stream', { detail: event.campaign_id }))
       } else if (event.type === 'campaign.changed') {
@@ -765,7 +772,8 @@ onBeforeUnmount(() => {
       </div>
     </nav>
      <KeepAlive>
-       <Entertainment v-if="entertainment" :key="me.id" :me="me" :people="people" :api="api" :revision="gameRevision" @notify="notify" @chat="openCampaignChat" />
+       <Entertainment v-if="entertainment && !estateMode" :key="`campaign-${me.id}`" :me="me" :people="people" :api="api" :revision="gameRevision" @estate="openEstate" @notify="notify" @chat="openCampaignChat" />
+       <Estate v-else-if="entertainment && estateMode" :key="`estate-${me.id}`" :me="me" :api="api" :revision="gameRevision" :connection="connection" @campaign="estateMode = false" @notify="notify" />
      </KeepAlive>
      <template v-if="!entertainment">
      <aside class="conversation-panel">

@@ -17,6 +17,7 @@
     "test:auto-update": "node scripts/auto-update-check.cjs",
     "test:features": "node --test scripts/mentions.test.cjs scripts/updates.test.cjs scripts/campaign.test.cjs",
     "test:entertainment": "node scripts/entertainment-check.cjs",
+    "test:estate": "node scripts/estate-check.cjs && node scripts/estate-edge-check.cjs",
     "test:dice": "node scripts/dice-check.cjs",
     "test:streaming": "node --test scripts/model-stream.test.cjs && node scripts/streaming-check.cjs",
     "test:realtime": "node scripts/realtime-check.cjs",

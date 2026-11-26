@@ -1,0 +1,229 @@
+.estate-shell { min-width: 0; min-height: 0; overflow: auto; background: var(--bg); color: var(--text); font-variant-numeric: tabular-nums; }
+.estate-shell button:focus-visible, .estate-shell summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+.estate-shell h1 { font-size: 23px; font-weight: 600; letter-spacing: -.4px; overflow-wrap: anywhere; }
+.estate-shell h1 span { font-size: 15px; font-weight: 400; color: var(--muted); }
+.estate-shell h2 { font-size: 18px; font-weight: 600; }
+.estate-shell h3 { font-size: 16px; }
+.estate-shell .primary, .estate-shell .secondary { padding: 9px 14px; min-height: 40px; }
+.estate-shell .secondary { border: 1px solid var(--line); border-radius: 8px; background: var(--raised); color: var(--raised-text); }
+.estate-shell .secondary:hover:not(:disabled) { background: var(--hover); }
+.estate-header { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 20px 24px; border-bottom: 1px solid var(--line); }
+.estate-header p { color: var(--muted); font-size: 12px; margin-top: 4px; }
+.estate-header-actions { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; justify-content: flex-end; }
+.estate-error, .estate-offline { padding: 10px 20px; background: var(--danger-bg); color: var(--danger); overflow-wrap: anywhere; }
+.estate-offline { background: var(--warning-bg); color: var(--warning); }
+.estate-warning { color: var(--warning); }
+.estate-loading { padding: 40px; color: var(--muted); }
+.estate-rules { padding: 20px 24px; border-bottom: 1px solid var(--line); max-height: 36vh; overflow-y: auto; }
+.estate-rules p { margin-top: 10px; max-width: 76ch; line-height: 1.8; }
+.estate-lobby { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 48px; max-width: 1080px; padding: 48px 32px; margin: auto; }
+.estate-room-list > p { margin: 12px 0 24px; }
+.estate-empty { padding: 40px 0; }
+.estate-room-row { display: flex; justify-content: space-between; width: 100%; padding: 20px 0; gap: 16px; text-align: left; border-bottom: 1px solid var(--line); }
+.estate-room-row:hover { background: var(--hover); }
+.estate-room-row > span { min-width: 0; }
+.estate-room-row strong { display: block; overflow-wrap: anywhere; font-size: 16px; }
+.estate-room-row small { display: block; margin-top: 5px; color: var(--muted); }
+.estate-room-row > span:last-child { display: flex; align-items: center; gap: 4px; white-space: nowrap; color: var(--accent-text); }
+.estate-create { border-left: 1px solid var(--line); padding-left: 32px; display: flex; flex-direction: column; gap: 20px; align-self: start; }
+.estate-shell label { display: flex; flex-direction: column; gap: 7px; }
+.estate-shell input, .estate-shell select, .estate-shell textarea { width: 100%; min-width: 0; background: var(--field); color: var(--field-text); border: 1px solid var(--field-line); padding: 10px 12px; border-radius: 7px; }
+.estate-waiting { max-width: 760px; margin: auto; padding: 40px 24px; }
+.estate-waiting p { margin-top: 12px; }
+.estate-seats { list-style: none; padding: 0; margin: 24px 0; }
+.estate-seats li { display: flex; align-items: center; gap: 12px; padding: 18px 0; border-bottom: 1px solid var(--line); }
+.estate-seats li strong { flex: 1; overflow-wrap: anywhere; }
+.estate-seats li > span { color: var(--muted); font-size: 12px; }
+.estate-token { width: 24px; height: 24px; flex-shrink: 0; }
+.estate-token circle { fill: var(--pawn-bg); stroke: var(--pawn-ink); stroke-width: 1.2; }
+.estate-token text { fill: var(--pawn-ink); font: 700 14px "Segoe UI", sans-serif; }
+/* Game identity colours are deliberately independent of the muted app palette.
+   White number contrast: blue 5.17, orange 5.18, purple 5.70, green 5.02. */
+.estate-token-0 { --pawn-bg: #2563eb; --pawn-ink: #ffffff; }
+.estate-token-1 { --pawn-bg: #c2410c; --pawn-ink: #ffffff; }
+.estate-token-2 { --pawn-bg: #7c3aed; --pawn-ink: #ffffff; }
+.estate-token-3 { --pawn-bg: #15803d; --pawn-ink: #ffffff; }
+.estate-token-picker { border: 0; padding: 0; margin: 24px 0; display: flex; gap: 10px; flex-wrap: wrap; }
+.estate-token-picker legend { margin-bottom: 10px; }
+.estate-token-picker button { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 8px; }
+.estate-token-picker button[aria-pressed="true"] { background: var(--selected); border-color: var(--selected-line); color: var(--selected-text); }
+.estate-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.estate-game-layout { display: grid; grid-template-columns: 164px minmax(0, 1fr) 280px; gap: 20px; padding: 20px; align-items: start; }
+.estate-players { min-width: 0; max-height: calc(100dvh - 140px); overflow-y: auto; }
+.estate-players h2 { font-size: 13px; color: var(--muted); margin-bottom: 12px; }
+.estate-players ol { list-style: none; padding: 0; margin: 0; }
+.estate-players li { padding: 12px; border: 1px solid var(--line); border-radius: 9px; margin-bottom: 8px; }
+.estate-players li.current { background: var(--selected); border-color: var(--selected-line); color: var(--selected-text); }
+.estate-players li > div { display: flex; align-items: center; gap: 7px; }
+.estate-players li strong { font-size: 13px; overflow-wrap: anywhere; }
+.estate-players li > b { display: flex; align-items: baseline; gap: 8px; font-size: 20px; margin-top: 8px; }
+.estate-players li small { font-size: 11px; font-weight: 400; }
+.estate-players li > span { display: block; font-size: 11px; margin-top: 3px; }
+.estate-players .bankrupt { opacity: .65; }
+.estate-owned { margin-top: 20px; }
+.estate-owned summary { cursor: pointer; font-weight: 600; padding: 8px 0; }
+.estate-owned p { font-size: 12px; }
+.estate-owned button { width: 100%; display: flex; justify-content: space-between; gap: 4px; text-align: left; padding: 10px 4px; border-bottom: 1px solid var(--line); font-size: 12px; }
+.estate-owned button[aria-pressed="true"] { color: var(--accent-text); }
+.estate-map-area { min-width: 0; }
+.estate-board { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); grid-template-rows: repeat(7, minmax(0, 1fr)); aspect-ratio: 1; gap: 4px; width: min(100%, calc(100dvh - 164px)); margin: auto; }
+.estate-cell { position: relative; padding: 5px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--text); min-width: 0; text-align: left; display: flex; flex-direction: column; justify-content: center; line-height: 1.25; }
+.estate-cell:hover { background: var(--hover); }
+.estate-cell.selected { outline: 2px solid var(--accent-text); outline-offset: 0; z-index: 1; }
+.estate-cell-meta { display: flex; justify-content: space-between; color: var(--muted); font-size: 9px; margin-bottom: 3px; }
+.estate-cell strong { font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
+.estate-cell > small { font-size: 10px; color: var(--muted); margin-top: 3px; }
+.estate-group-A { background: var(--avatar-blue); color: var(--avatar-blue-text); }
+.estate-group-B { background: var(--avatar-peach); color: var(--avatar-peach-text); }
+.estate-group-C { background: var(--avatar-lilac); color: var(--avatar-lilac-text); }
+.estate-group-D { background: var(--avatar-sand); color: var(--avatar-sand-text); }
+.estate-cell[class*="estate-group-"] > small, .estate-cell[class*="estate-group-"] .estate-cell-meta { color: inherit; }
+.estate-cell-pawns { position: absolute; right: 1px; bottom: 1px; display: flex; flex-wrap: wrap; max-width: calc(100% - 2px); gap: 1px; background: var(--panel); border-radius: 3px; color: var(--text); }
+.estate-cell-pawns:empty { display: none; }
+.estate-cell-pawns .estate-token { width: 20px; height: 20px; }
+.estate-pawn { display: flex; position: relative; z-index: 3; pointer-events: none; }
+.estate-cell:has(.estate-pawn) { z-index: 2; }
+.estate-cell-owner { display: block; font-size: 10px; margin-top: 3px; }
+.estate-cell.mortgaged { background: var(--panel); color: var(--muted); border-style: dashed; }
+.estate-board-center { grid-area: 2 / 2 / 7 / 7; overflow: auto; display: flex; flex-direction: column; align-items: center; justify-content: safe center; padding: 16px; text-align: center; background: var(--bg); }
+.estate-dice { display: flex; align-items: center; gap: 12px; justify-content: center; flex-shrink: 0; margin: 0 0 18px; }
+.estate-dice .dice-object { width: 80px; height: 80px; }
+.estate-detail { width: 100%; max-width: 330px; }
+.estate-detail > small { font-size: 11px; color: var(--muted); }
+.estate-detail h2 { margin: 6px 0; font-size: 25px; letter-spacing: -.5px; }
+.estate-detail p { margin: 8px 0; font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.estate-detail dl { display: flex; justify-content: center; gap: 32px; margin: 16px 0; }
+.estate-detail dt { font-size: 11px; color: var(--muted); }
+.estate-detail dd { font-size: 21px; font-weight: 600; margin: 0; }
+.estate-manage { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+.estate-manage button { font-size: 12px; }
+.estate-manage .estate-rent-impact { width: 100%; margin: 0 0 8px; }
+.estate-rent-impact { color: var(--muted); font-size: 11px; line-height: 1.7; overflow-wrap: anywhere; }
+.estate-debt-asset { padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+.estate-player-position { color: var(--muted); }
+.estate-recent { margin: 14px auto 0; font-size: 12px; color: var(--muted); text-align: center; min-height: 2em; overflow-wrap: anywhere; }
+.estate-map-list { margin: 12px 0; }
+.estate-map-list summary { cursor: pointer; font-size: 12px; color: var(--muted); }
+.estate-map-list button { display: inline-block; font-size: 12px; padding: 8px; }
+.estate-right { display: flex; flex-direction: column; gap: 16px; height: calc(100dvh - 142px); min-height: 380px; min-width: 0; }
+.estate-action { flex-shrink: 0; max-height: 52%; overflow-y: auto; padding: 16px; border: 1px solid var(--selected-line); border-radius: 9px; background: var(--panel); }
+.estate-action-heading { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.estate-action h2 { font-size: 16px; overflow-wrap: anywhere; }
+.estate-action p { margin: 7px 0; font-size: 12px; }
+.estate-action > small, .estate-action-heading > span { color: var(--muted); font-size: 11px; }
+.estate-action button { display: flex; justify-content: center; width: 100%; margin: 8px 0; }
+.estate-action .estate-roll { margin: 14px 0; min-height: 46px; }
+.estate-social { display: flex; flex-direction: column; min-height: 160px; flex: 1; border-top: 1px solid var(--line); }
+.estate-social-tabs { display: flex; gap: 20px; padding: 12px 0; flex-shrink: 0; }
+.estate-social-tabs button { color: var(--muted); padding: 5px 0; }
+.estate-social-tabs button[aria-pressed="true"] { color: var(--accent-text); text-decoration: underline; text-underline-offset: 8px; }
+.estate-chat-log, .estate-events { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding-right: 6px; }
+.estate-chat-log article { padding: 9px 0; }
+.estate-chat-log strong { font-size: 12px; color: var(--muted); }
+.estate-chat-log p { font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; }
+.estate-chat-compose { display: flex; align-items: end; gap: 6px; padding-top: 10px; flex-shrink: 0; }
+.estate-chat-compose textarea { resize: vertical; max-height: 120px; min-height: 40px; font-size: 13px; }
+.estate-chat-compose .primary { padding: 8px; white-space: nowrap; }
+.estate-chat-compose .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.estate-events p { font-size: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.estate-events time { display: block; color: var(--muted); font-size: 10px; margin-bottom: 4px; }
+.estate-drawer-toggle { display: none; }
+.estate-results { padding: 24px; border-top: 1px solid var(--line); }
+.estate-results > p { margin: 8px 0 16px; }
+.estate-table-wrap { overflow-x: auto; }
+.estate-results table { border-collapse: collapse; min-width: 650px; width: 100%; font-size: 13px; text-align: right; }
+.estate-results th, .estate-results td { padding: 14px 12px; border-bottom: 1px solid var(--line); }
+.estate-results tr > :first-child { text-align: left; }
+.estate-mode-link { margin: 0 20px 16px; padding: 10px 12px; display: flex; align-items: center; justify-content: space-between; border: 1px solid var(--line); border-radius: 7px; text-align: left; }
+@media (min-width: 1450px) { .estate-game-layout { grid-template-columns: 184px minmax(0, 1fr) 300px; gap: 24px; padding: 24px; } .estate-cell strong { font-size: 13px; } }
+@media (max-width: 1199px) {
+  .estate-game-layout { grid-template-columns: minmax(0, 1fr) 260px; gap: 16px; padding: 16px; }
+  .estate-players { grid-column: 1 / -1; max-height: none; display: flex; gap: 12px; align-items: start; }
+  .estate-players h2 { display: none; }
+  .estate-players ol { display: flex; flex: 1; gap: 8px; min-width: 0; }
+  .estate-players li { flex: 1; margin: 0; padding: 8px; min-width: 0; }
+  .estate-players li > b { font-size: 16px; margin-top: 3px; }
+  .estate-players li > span { font-size: 10px; }
+  .estate-owned { margin: 0; width: 110px; max-height: 100px; overflow-y: auto; }
+  .estate-right { height: calc(100dvh - 254px); }
+  .estate-board { width: min(100%, calc(100dvh - 260px)); }
+}
+@media (max-width: 959px) {
+  .estate-game-layout { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .estate-board { width: min(100%, 580px); }
+  .estate-right { height: auto; min-height: 0; }
+  .estate-action { max-height: 310px; }
+  .estate-drawer-toggle { display: block; }
+  .estate-social { display: none; height: 340px; flex: none; }
+  .estate-social.drawer-open { display: flex; }
+  .estate-right { grid-row: 2; }
+  .estate-action .estate-roll { width: 100%; margin: 8px 0; }
+  .estate-lobby { grid-template-columns: minmax(0, 1fr); gap: 32px; padding: 24px; }
+  .estate-create { border-left: 0; border-top: 1px solid var(--line); padding: 24px 0; }
+  .estate-header { padding: 14px 16px; flex-wrap: wrap; }
+  .estate-header-actions { justify-content: flex-start; gap: 12px; }
+}
+@media (max-width: 600px) {
+  .workspace.entertainment-workspace:has(.estate-shell) { grid-template-columns: 1fr; }
+  .workspace.entertainment-workspace:has(.estate-shell) > .rail { display: none; }
+  .estate-shell h1 { font-size: 20px; }
+  .estate-shell h1 span { font-size: 13px; }
+  .estate-game-layout { padding: 12px; }
+  .estate-players { flex-direction: column; }
+  .estate-players ol { width: 100%; gap: 4px; }
+  .estate-players li > div { gap: 3px; }
+  .estate-players li strong { font-size: 11px; }
+  .estate-players .estate-token { width: 20px; height: 20px; }
+  .estate-players li small { display: none; }
+  .estate-owned { width: 100%; max-height: 90px; }
+  .estate-owned button { display: inline-flex; width: auto; gap: 6px; margin-right: 10px; }
+  .estate-owned p { display: none; }
+  .estate-board { gap: 2px; }
+  .estate-cell { padding: 3px; }
+  .estate-cell strong, .estate-cell > small { display: none; }
+  .estate-cell-meta { font-size: 10px; }
+  .estate-board-center { padding: 8px; justify-content: flex-start; }
+  .estate-dice { margin-bottom: 8px; }
+  .estate-dice .dice-object { width: 32px; height: 32px; }
+  .estate-detail h2 { font-size: 20px; }
+  .estate-detail dl { margin: 8px 0; }
+  .estate-detail dd { font-size: 17px; }
+  .estate-detail p { font-size: 11px; }
+  .estate-cell-pawns { flex-wrap: wrap; max-width: 36px; }
+  .estate-cell-pawns .estate-token { width: 17px; height: 17px; }
+.estate-seats li { gap: 8px; }
+}
+
+/* Dedicated information and pawn rows prevent even four occupants covering rent
+   or owner text. Compact screens scroll the board, never hide its information. */
+.estate-board-scroll { overflow-x: auto; padding: 4px; overscroll-behavior-x: contain; }
+.estate-board { width: min(100%, calc(100dvh - 190px)); min-width: 630px; }
+.estate-cell { display: grid; grid-template-rows: minmax(0, 1fr) 18px; align-items: stretch; justify-content: stretch; padding: 5px; gap: 3px; }
+.estate-cell-info { min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 2px; }
+.estate-cell-info strong { display: block; font-size: 12px; line-height: 1.25; }
+.estate-cell-info > small { display: block; font-size: 10px; color: inherit; }
+.estate-cell-meta { margin: 0; line-height: 1.2; }
+.estate-cell-pawns { position: static; display: grid; grid-template-columns: repeat(4, 16px); gap: 1px; height: 18px; max-width: none; background: transparent; align-items: center; }
+.estate-cell-pawns:empty { display: grid; }
+.estate-cell-pawns .estate-token { width: 16px; height: 16px; }
+.estate-cell-owner { align-self: flex-start; display: inline-block; border-radius: 3px; padding: 1px 3px; margin: 0; font-size: 10px; line-height: 1.3; color: #ffffff; }
+.estate-owner-0 { background: #2563eb; }
+.estate-owner-1 { background: #c2410c; }
+.estate-owner-2 { background: #7c3aed; }
+.estate-owner-3 { background: #15803d; }
+.estate-cell.estate-landing { border: 2px dashed var(--accent-text); }
+.estate-cell.selected { outline-style: solid; }
+.estate-map-help { font-size: 11px; color: var(--muted); margin: 0 4px 8px; }
+.estate-viewing-label { color: var(--muted); font-size: 11px; display: block; margin-bottom: 4px; }
+.estate-player-inspect { text-align: left; padding: 0; text-decoration: underline; text-underline-offset: 3px; min-width: 0; }
+.estate-player-inspect[aria-pressed="true"] { color: var(--accent-text); }
+.estate-turn-label { color: var(--accent-text); font-weight: 600; }
+.estate-right { position: sticky; top: 12px; }
+@media (max-width: 959px) {
+  .estate-right { display: contents; }
+  .estate-action { grid-row: 2; position: sticky; top: 0; z-index: 6; max-height: min(310px, 42dvh); }
+  .estate-map-area { grid-row: 3; }
+  .estate-drawer-toggle { grid-row: 4; }
+  .estate-social { grid-row: 5; }
+  .estate-board-center { justify-content: safe center; }
+}

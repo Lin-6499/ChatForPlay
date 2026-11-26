@@ -173,6 +173,7 @@ func newApp(c config) (*app, error) {
 		}
 	}
 	a.resumeGames()
+	a.resumeEstate()
 	return a, nil
 }
 
@@ -205,6 +206,7 @@ func (a *app) handler() http.Handler {
 	m.Handle("GET /api/files/{id}", a.auth(a.downloadFile))
 	m.Handle("GET /api/ws", a.auth(a.websocket))
 	a.registerGames(m)
+	a.registerEstate(m)
 	m.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) { fail(w, 404, "接口不存在") })
 	staticFS, _ := fs.Sub(assets, "web/dist")
 	static := http.FileServer(http.FS(staticFS))

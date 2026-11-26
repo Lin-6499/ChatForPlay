@@ -126,6 +126,10 @@ func openStore(path string) (*store, error) {
 		db.Close()
 		return nil, err
 	}
+	if err = migrateEstate(db); err != nil {
+		db.Close()
+		return nil, err
+	}
 	_, err = db.Exec("DELETE FROM sessions WHERE expires_at < ?", time.Now().UnixMilli())
 	if err != nil {
 		db.Close()

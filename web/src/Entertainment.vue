@@ -14,7 +14,7 @@ import { getScrollPosition } from '../../desktop/scroll-memory.mjs'
 import type { ReplyOption, ReplyPromptView } from './game-types'
 
 const props = defineProps<{ me: GameUser; people: GameUser[]; api: GameAPI; revision: number }>()
-const emit = defineEmits<{ notify: [text: string]; chat: [conversationID: number] }>()
+const emit = defineEmits<{ notify: [text: string]; chat: [conversationID: number]; estate: [] }>()
 const campaigns = ref<Campaign[]>([]), current = ref<Campaign | null>(null), loading = ref(true), refreshing = ref(false)
 const listError = ref('')
 const characters = ref<Character[]>([]), events = ref<GameEvent[]>([]), turns = ref<Turn[]>([]), members = ref<GameUser[]>([])
@@ -349,6 +349,7 @@ onBeforeUnmount(() => { stopped = true; requestGeneration++; clearInterval(timer
   <div class="game-layout" :class="{ 'game-open': mobileOpen && current }" :inert="modalOpen">
     <aside class="game-index">
       <header><div><h1>娱乐模式</h1><p>一起写下你们的冒险。</p></div><button class="icon-button outlined" aria-label="新建战役" @click="showCreate = true; error = ''"><Icon name="plus" /></button></header>
+      <button class="estate-mode-link" @click="emit('estate')"><span>地产大亨 · 多人棋盘</span><Icon name="dice" :size="18" /></button>
       <div class="game-campaigns" :data-scroll-key="`${me.id}/campaigns`" aria-label="我的战役">
         <p v-if="loading" class="game-empty-small">正在读取战役存档…</p>
         <div v-if="listError" class="game-index-error" role="alert"><b>战役暂时未能加载</b><p>{{ listError }}</p><button class="game-button" :disabled="refreshing" @click="refresh">{{ refreshing ? '正在重试…' : '重试加载战役' }}</button></div>
