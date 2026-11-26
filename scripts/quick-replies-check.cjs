@@ -34,6 +34,18 @@ async function main() {
     pass('Host composer publishes player-targeted choices alongside a public narration')
 
     const player = await browser.newContext({ viewport: { width: 390, height: 780 } })
+    const preload = fs.readFileSync(path.resolve(__dirname, '../desktop/preload.cjs'), 'utf8')
+    await player.addInitScript(preload => {
+      // Exercise actual desktop titlebar space without launching Electron.
+      const electron = {
+        contextBridge: { exposeInMainWorld() {} },
+        ipcRenderer: {
+          on() {},
+          invoke: async () => ({ enabled: true, color: '#1b2220', symbolColor: '#edf2ef', fullscreen: false }),
+        },
+      }
+      new Function('require', 'process', preload)(() => electron, { platform: 'win32' })
+    }, preload)
     await player.addCookies([{ name: 'linchat_session', value: f.player.cookie.split('=')[1], url: f.url }])
     const page = await player.newPage()
     page.on('pageerror', e => errors.push(e.message))
@@ -94,17 +106,34 @@ async function main() {
     await page.getByRole('button', { name: '提交行动', exact: true }).click()
     await page.getByRole('alert').filter({ hasText: '这组快捷回复已失效' }).waitFor()
     pass('A free-text draft is also bound to its original question when the host updates the prompt')
-    for (const size of [{ width: 320, height: 640 }, { width: 820, height: 600 }]) {
+    for (const size of [{ width: 320, height: 640 }, { width: 820, height: 600 }, { width: 1280, height: 850 }]) {
       await publish(); await page.setViewportSize(size); await page.reload()
       await replies.getByRole('button', { name: '调查线索', exact: true }).waitFor()
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true)
       await page.getByLabel('行动或叙述内容').fill('布局验收')
-      await page.getByRole('button', { name: '提交行动', exact: true }).scrollIntoViewIfNeeded()
       const box = await page.getByRole('button', { name: '提交行动', exact: true }).boundingBox()
       assert.ok(box.y + box.height <= size.height)
+      const journal = await page.locator('.game-journal').boundingBox()
+      assert.ok(journal.height >= 150, `Journal needs reading space: ${JSON.stringify({ size, journal })}`)
+      const input = await page.getByLabel('行动或叙述内容').boundingBox()
+      assert.ok(input.height >= 55 && input.y + input.height <= box.y, 'Whole input remains visible above submit')
+      assert.equal(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight), true)
+      await page.screenshot({ path: path.join(out, `layout-${size.width}.png`) })
+      await page.getByLabel('行动或叙述内容').fill('这是一段较长的行动描述，用来确认输入增长时仍能阅读正文。\n'.repeat(25))
+      const longBox = await page.getByRole('button', { name: '提交行动', exact: true }).boundingBox()
+      assert.ok(longBox.y + longBox.height <= size.height)
+      assert.ok((await page.locator('.game-journal').boundingBox()).height >= 150)
+      await page.locator('.game-scene summary').click()
+      const sceneBox = await page.getByRole('button', { name: '提交行动', exact: true }).boundingBox()
+      assert.ok(sceneBox.y + sceneBox.height <= size.height, 'Expanded scene keeps submit visible')
+      await page.locator('.game-scene summary').click()
+      await page.getByLabel('行动或叙述内容').fill('布局验收')
+      await page.getByRole('button', { name: '提交行动', exact: true }).click()
+      await page.getByText('你已回复这组问题', { exact: true }).waitFor()
+      await page.screenshot({ path: path.join(out, `answered-${size.width}.png`) })
     }
     await page.screenshot({ path: path.join(out, 'desktop-choice.png') })
-    pass('320px mobile and compact desktop retain reachable choices, custom composer and submit control')
+    pass('Mobile, compact and large desktop with titlebar retain readable logs and visible submit through choices, long drafts, expanded scenes and answered state')
     assert.deepEqual(errors, [])
     fs.writeFileSync(path.join(out, 'results.json'), JSON.stringify({ results, errors }, null, 2))
   } finally { await browser.close(); await f.stop() }

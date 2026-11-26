@@ -378,9 +378,11 @@ onBeforeUnmount(() => { stopped = true; requestGeneration++; clearInterval(timer
       <nav class="game-tabs" aria-label="战役内容"><button v-for="t in tabs" :key="t.id" :class="{ active: tab === t.id }" :disabled="busy" :aria-current="tab === t.id ? 'page' : undefined" @click="chooseTab(t.id)">{{ t.label }}</button></nav>
       <p v-if="error && !showCreate && !showAI && !showDice && !editCharacter" class="game-error" role="alert">{{ error }}<button class="text-button" @click="error = ''; refresh()">刷新</button></p>
       <template v-if="tab === 'journal'">
+        <div class="game-context">
         <CampaignFlow :key="`flow-${current.id}`" :campaign="current" :api="api" :me="me" :members="members" :revision="revision" :draft-state="supplementDraft(current.id)" @changed="refresh" @new-action="supplementAsAction" />
         <CampaignRecap :key="current.id" :campaign-i-d="current.id" :api="api" :revision="current.version + revision" />
         <details class="game-scene" :open="!events.length"><summary><Icon name="book" :size="17" /><b>当前场景</b><span>{{ current.scene || '等待房主铺开第一幕' }}</span></summary><p>{{ current.scene || '房主可在主持台填写起始场景，再继续战役。' }}</p><div v-if="current.summary" class="game-summary"><h3>上次的故事</h3><p>{{ current.summary }}</p></div></details>
+        </div>
         <div v-if="pendingTurn?.status === 'failed' || (pendingTurn?.status === 'running' && Date.now() - pendingTurn.started_at > 180000)" class="game-turn-error" role="status"><div><b>主持暂未完成</b><p>{{ pendingTurn.error || '回合已超时，已掷骰结果会保留。' }}</p></div><template v-if="isOwner"><button class="game-button" :disabled="busy" @click="retry(pendingTurn)">重试</button><button class="text-button" :disabled="busy" @click="retry(pendingTurn, true)">跳过</button></template></div>
         <div ref="journal" class="game-journal" :data-scroll-key="scrollKey('journal')" :data-scroll-ready="journalReady" data-scroll-follow role="log" aria-label="战役日志">
           <button v-if="canOlder && events.length" class="history-button" :disabled="busy" @click="older">读取更早的记录</button>
@@ -394,23 +396,24 @@ onBeforeUnmount(() => { stopped = true; requestGeneration++; clearInterval(timer
           <HostStream :key="current.id" :campaign-i-d="current.id" :api="api" :completed="events.filter(e => e.kind === 'narration' || e.kind === 'summary').map(e => e.payload.turn_id || 0)" />
         </div>
         <footer class="game-composer">
+          <div class="game-compose-fields">
           <div v-if="replyError" class="game-reply-status" role="status">{{ replyError }}<button class="text-button" @click="loadReplyPrompt(current.id, requestGeneration)">重试</button></div>
           <section v-else-if="replyPrompt && composeKind === 'action'" class="game-quick-replies" aria-label="主持人快捷回复">
-            <small class="game-helper">对应主持叙述 #{{ replyPrompt.event_id }} · {{ replyPrompt.can_reply ? '待你提交，点击选项不会立即发送' : replyPrompt.answered ? '本组已回复' : '当前不可回复' }}</small>
-            <b>{{ replyPrompt.answered ? '你已回复这组问题' : replyPrompt.can_reply ? '主持人等你回复' : replyPrompt.target_user_id && replyPrompt.target_user_id !== me.id ? '等待指定玩家回复' : '等待主持人继续' }}</b>
+            <div class="game-reply-heading"><b>{{ replyPrompt.answered ? '你已回复这组问题' : replyPrompt.can_reply ? '主持人等你回复' : replyPrompt.target_user_id && replyPrompt.target_user_id !== me.id ? '等待指定玩家回复' : '等待主持人继续' }}</b><small class="game-helper">对应叙述 #{{ replyPrompt.event_id }}</small></div>
             <div v-if="replyPrompt.can_reply" class="game-reply-options">
               <button v-for="option in replyPrompt.options" :key="option.id" type="button" class="game-button" :disabled="busy" :aria-pressed="selectedReply?.eventID === replyPrompt.event_id && selectedReply?.optionID === option.id && draft === option.content" @click="chooseReply(option)">{{ option.label }}</button>
             </div>
             <p v-if="replyPrompt.can_reply">点击选项填入下方，也可以修改或自行输入，再提交行动。</p>
           </section>
           <div v-if="selectedReply && composeKind === 'action'" class="game-reply-status"><span>{{ selectedReply.eventID === replyPrompt?.event_id ? '回复已关联主持人的问题' : '原问题已更新，请重新选择' }}</span><button class="text-button" @click="selectedReply = null">{{ selectedReply.optionID ? '取消快捷选择' : '重新确认问题' }}</button></div>
-          <div class="game-compose-controls"><label class="game-select-label">发送为<select v-model="composeKind" aria-label="战役消息类型"><option value="action">玩家行动</option><option value="private">私密消息</option><template v-if="isOwner"><option value="narration">主持叙述</option><option value="summary">结束并保存摘要</option></template></select></label><label v-if="composeKind === 'private'" class="game-select-label">给<select v-model.number="recipient" aria-label="私密消息接收者"><option :value="0" disabled>{{ privateRecipients.length ? '选择接收者' : '暂无其他成员' }}</option><option v-for="p in privateRecipients" :key="p.id" :value="p.id">{{ p.nickname }}</option></select></label><button class="text-button" :disabled="current.phase === 'paused' || busy" @click="showDice = true; error = ''"><Icon name="dice" :size="17" />掷骰</button></div>
           <details v-if="isOwner && composeKind === 'narration'" class="game-reply-editor">
             <summary>添加快捷回复（可选）</summary>
             <label>回复者<select v-model.number="replyTarget" aria-label="快捷回复的回复者"><option :value="0">所有成员，各自回复</option><option v-for="p in members" :key="p.id" :value="p.id">{{ p.nickname }}</option></select></label>
             <label>快捷回复选项<textarea v-model="quickReplyLines" rows="3" maxlength="300" aria-label="快捷回复选项" placeholder="每行一条，最多 6 条，每条最多 40 字&#10;接下委托&#10;先询问报酬&#10;暂时离开"></textarea></label>
             <p class="game-helper">随这条公开叙述发布。玩家始终可以自定义回复；新叙述会替换上一组选择。</p>
           </details>
+          </div>
+          <div class="game-compose-controls"><label class="game-select-label">发送为<select v-model="composeKind" aria-label="战役消息类型"><option value="action">玩家行动</option><option value="private">私密消息</option><template v-if="isOwner"><option value="narration">主持叙述</option><option value="summary">结束并保存摘要</option></template></select></label><label v-if="composeKind === 'private'" class="game-select-label">给<select v-model.number="recipient" aria-label="私密消息接收者"><option :value="0" disabled>{{ privateRecipients.length ? '选择接收者' : '暂无其他成员' }}</option><option v-for="p in privateRecipients" :key="p.id" :value="p.id">{{ p.nickname }}</option></select></label><button class="text-button" :disabled="current.phase === 'paused' || busy" @click="showDice = true; error = ''"><Icon name="dice" :size="17" />掷骰</button></div>
           <textarea v-model="draft" class="game-action-input" rows="2" :maxlength="composeKind === 'action' ? 4000 : 8000" aria-label="行动或叙述内容" :placeholder="composeKind === 'action' ? '描述你的行动，例如：我举起火把，查看石门上的刻痕…' : composeKind === 'private' ? '只有接收者、发送者和房主能看到这条消息…' : '写下公开叙述或本次已经发生的事实…'" @input="bindReplyDraft" @compositionstart="composing = true" @compositionend="composing = false; bindReplyDraft()" @keydown.enter.ctrl.prevent="!composing && submit()"></textarea>
           <div class="game-compose-bottom"><span>{{ composeKind === 'action' ? current.auto_respond && current.mode !== 'manual' ? '提交后主持人将依次处理 · Ctrl + Enter 提交' : '行动写入日志，由房主继续主持' : composeKind === 'private' ? '私密消息不进入公开 AI 上下文' : '公开内容会同步到战役群聊' }}</span><button class="send-button" :disabled="busy || composing || !draft.trim() || (composeKind === 'action' && current.phase === 'paused') || (composeKind === 'private' && !validRecipient)" @click="submit">{{ composeKind === 'action' ? '提交行动' : composeKind === 'summary' ? '保存摘要' : '发送' }}<Icon name="send" :size="16" /></button></div>
         </footer>

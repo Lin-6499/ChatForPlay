@@ -33,3 +33,10 @@ Scope: shared theme runtime and palette controls; chat, auth, entertainment, des
 - First-viewport checks confirm the composer lies inside the viewport. Its generic click-only check reports the intentional empty-draft disabled state; typed message/action tests verify submission.
 - Mechanical detector ran once; its one desktop small-copy warning was resolved. No new visual raster was introduced; retained logo and tray PNGs carry source provenance, preserved by the icon build.
 - Documentation: token-bearing `DESIGN.md` and `.impeccable/design.json`.
+
+## Reading refinement — 2026-11-26
+
+- Preserve the established Operate shell and system font stack. Chat prose and composer use `--reading-font-size: 1.143rem` (16px at the existing 14px UI root) and 1.85 leading. Sender labels use 13px semibold; timestamps, receipts and header metadata use 12px.
+- Chat gutters grow from 20px to 40px, then center a 960px reading region on wide canvases. Individual message content remains capped at 640px; mobile retains the existing single-panel navigation and safe-area-aware composer.
+- Conversation names truncate within their flex track, retaining their complete text and a native title. Preview text uses 13px with a tighter 4px relationship to its title.
+- Verification: `npm run build:web` passed; all 11 `test:reading-position` scenarios passed using an isolated in-memory server and headless browser. Desktop (1264×811), mobile (390×780), and empty-state captures are in `dist/verification/reading-position/`. Desktop and mobile captures were visually reviewed; mobile overflow and reading-position restoration passed. Mechanical changed-file scan returned no findings.

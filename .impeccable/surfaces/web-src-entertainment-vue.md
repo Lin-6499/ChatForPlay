@@ -7,6 +7,13 @@ related_targets: ["web/src/entertainment.css","web/src/game-types.ts","web/src/D
 
 # Entertainment mode — existing LinChat surface
 
+## Compact window layout · 2026-11-26
+
+- Below 720px viewport height, reduce header, tabs and scene spacing while keeping journal typography intact. Reserve at least 150px of journal at the verified sizes.
+- Composer uses a bounded scroll area for reply choices and host options, followed by persistent message-type controls, a growing bounded textarea and submit row. Expanded scenes may shrink the options region rather than push submission offscreen.
+- Headless Chromium verification includes the actual desktop preload with mocked IPC and isolated fixture data at 320×640, 820×600 and 1280×850. Covers choices, custom replies, stale prompts, long drafts, scene expansion and answered state.
+- Visual review corrected clipped input and controls in the first captures. Final compact captures show readable logs, full input and submit controls; production build and quick-reply regression passed. Evidence: `dist/verification/quick-replies/`.
+
 ## Action flow and host integration · 1.2.12
 
 Continue the Operate identity without a new visual world. A collapsed journal queue exposes real participant identities, held submissions, explicit owner early-close confirmation, append-only supplements and safe retry controls. The queue scroll region is capped at40vh to preserve composer access. Host integration adds a plain diagnostic definition list inside the existing owner-only agents tab, not an ornamental dashboard.

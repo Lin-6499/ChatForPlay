@@ -20,7 +20,7 @@
 .game-owner-label { font-size: 11px; color: var(--accent-text); }
 .game-index > footer { border-top: 1px solid var(--line); padding: 18px 22px; display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
 .game-model-state { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
-.game-room { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--bg); }
+.game-room { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow-y: auto; background: var(--bg); }
 .game-room-header { padding: 22px 28px; display: flex; align-items: center; gap: 18px; flex-shrink: 0; }
 .game-room-title { flex: 1; min-width: 0; }
 .game-room-title h2 { font-size: 20px; font-weight: 600; line-height: 1.4; overflow-wrap: anywhere; letter-spacing: -.3px; }
@@ -45,7 +45,7 @@
 .game-scene > p, .game-summary p { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.9; font-size: 13px; padding-bottom: 16px; max-width: 72ch; }
 .game-summary { border-top: 1px solid var(--line); padding-top: 12px; }
 .game-summary h3 { font-size: 13px; margin-bottom: 6px; }
-.game-journal { flex: 1; overflow-y: auto; overflow-anchor: none; min-height: 0; padding: 28px 30px; overscroll-behavior: contain; }
+.game-journal { flex: 1; overflow-y: auto; overflow-anchor: none; min-height: min(160px, 25dvh); padding: 28px 30px; overscroll-behavior: contain; }
 .game-entry { margin: 0 auto 30px; max-width: 74ch; }
 .game-entry-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); line-height: 1.6; margin-bottom: 9px; }
 .game-entry-meta b { font-size: 12px; color: var(--text); }
@@ -73,7 +73,7 @@
 .game-compose-controls > .text-button { margin-left: auto; }
 .game-select-label { display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); }
 .game-select-label select { font-size: 12px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; max-width: 170px; background: var(--field); color: var(--text); }
-.game-action-input { display: block; width: 100%; resize: vertical; min-height: 62px; max-height: 180px; line-height: 1.7; border: 1px solid var(--border); border-radius: 8px; padding: 11px 13px; color: var(--text); background: var(--field); }
+.game-action-input { display: block; width: 100%; field-sizing: content; resize: vertical; min-height: 70px; max-height: 180px; line-height: 1.7; border: 1px solid var(--border); border-radius: 8px; padding: 11px 13px; color: var(--text); background: var(--field); }
 .game-compose-bottom { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 10px; }
 .game-compose-bottom > span { font-size: 11px; color: var(--muted); line-height: 1.6; }
 .game-compose-bottom .send-button { flex-shrink: 0; }
@@ -236,7 +236,11 @@
   .game-journal-empty { padding: 28px 8px; }
   .game-journal-empty p { font-size: 12px; }
 }
-.game-composer { max-height: 58%; overflow-y: auto; }
+.game-composer { display: grid; grid-template-rows: minmax(0, 1fr) auto auto auto; max-height: 45%; min-height: 160px; flex-shrink: 1; }
+.game-compose-fields { min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: 2px; }
+.game-context { min-height: 0; max-height: 30%; overflow-y: auto; flex-shrink: 1; }
+.game-context .game-scene { max-height: none; }
+.game-reply-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; font-size: 13px; }
 .game-quick-replies { display: grid; gap: 8px; padding-bottom: 12px; }
 .game-quick-replies > b { font-size: 13px; }
 .game-quick-replies > p, .game-reply-status { font-size: 12px; line-height: 1.6; color: var(--muted); }
@@ -248,3 +252,25 @@
 .game-reply-editor summary { cursor: pointer; color: var(--muted); font-size: 12px; padding: 8px 0; }
 .game-reply-editor label { display: grid; gap: 8px; font-size: 12px; margin: 12px 0; }
 .game-reply-editor select, .game-reply-editor textarea { width: 100%; color: var(--text); background: var(--field); border: 1px solid var(--border); border-radius: 7px; padding: 8px; }
+
+/* Height is the limiting dimension in a restored desktop window. Preserve
+   reading space and the submit row before allowing secondary content to grow. */
+@media (max-height: 720px) {
+  .game-context .campaign-flow > summary, .game-context .campaign-recap > summary { padding-block: 6px; }
+  .game-room-header { padding-block: 10px; }
+  .game-room-title p { margin-top: 3px; }
+  .game-state-strip { padding-block: 6px; flex-shrink: 0; }
+  .game-tabs button { padding-block: 9px; }
+  .game-scene summary { padding-block: 8px; }
+  .game-scene[open] { max-height: 22%; }
+  .game-journal { min-height: min(160px, 25dvh); padding-block: 12px; }
+  .game-entry { margin-bottom: 20px; }
+  .game-composer { padding-block: 8px; max-height: 43%; }
+  .game-compose-controls { margin-bottom: 6px; gap: 8px; }
+  .game-action-input { min-height: 58px; max-height: 100px; padding-block: 6px; }
+  .game-compose-bottom { margin-top: 6px; gap: 10px; }
+  .game-quick-replies { gap: 6px; padding-bottom: 6px; }
+  .game-quick-replies > p { display: none; }
+  .game-reply-status { margin-bottom: 6px; }
+  .game-reply-options { max-height: 80px; }
+}
