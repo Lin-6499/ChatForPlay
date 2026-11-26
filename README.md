@@ -23,7 +23,7 @@
 - Electron 内置 Go 服务端，可一键启动 Radmin 主机或仅本机体验。
 - 桌面新版后台下载与校验，点击“重启并更新”即可静默升级；支持连接中心、托盘和个人设置入口。
 - 娱乐模式：文字战役、角色卡、服务器掷骰、场景与摘要存档、私密资料和房主确认的设定提案。
-- 地产大亨（新增源码功能）：2–4人、24格、12轮棋盘对局，支持买地、升级、收租、抵押、偿债、房间聊天和断线恢复。入口为娱乐模式中的“地产大亨”；[使用与接口](docs/ESTATE.md)。
+- 地产大亨（1.2.15）：2–4人、24格、12轮棋盘对局，支持买地、升级、收租、抵押、偿债、房间聊天和断线恢复。新版内置服务端包含入口；远程服务器需同步升级。[使用与接口](docs/ESTATE.md)。
 - 属性／技能分级检定房规：投骰前锁定 DC 与后果、天然 20／1 优先、六档结果、玩家确认代价、资源幂等结算。
 - 支持 Grok / OpenAI 兼容 API 主持、战役专用令牌、独立机器人与 stdio MCP 连接器。
 
@@ -34,9 +34,9 @@
 
 ### 安装并选择位置
 
-**[下载 LinChat 1.2.14 安装包](https://github.com/Lin-6499/ChatForPlay/releases/download/v1.2.14/LinChat-Setup-1.2.14.exe)**
+**[下载 LinChat 1.2.15 安装包](https://github.com/Lin-6499/ChatForPlay/releases/download/v1.2.15/LinChat-Setup-1.2.15.exe)**
 
-1. 下载 `LinChat-Setup-1.2.14.exe`。
+1. 下载 `LinChat-Setup-1.2.15.exe`。
 2. 双击运行，在安装向导中点击**浏览**或直接输入路径，例如 `D:\应用\LinChat`，再点击**安装**。安装后创建桌面、开始菜单快捷方式；最后一页可选择是否立即运行。
 3. 点击预置的 **“LinChat 云端”**，用自己的账号登录。新成员先使用管理员发来的邀请链接注册。
 
@@ -53,9 +53,9 @@
 开发者本地构建后的文件：
 
 ```text
-dist/desktop/1.2.14/LinChat-Setup-1.2.14.exe       可选择安装目录的安装版
-dist/desktop/1.2.14/LinChat-Portable-1.2.14.exe    便携版
-dist/desktop/1.2.14/latest.yml                  自动更新版本与 SHA-512 清单
+dist/desktop/1.2.15/LinChat-Setup-1.2.15.exe       可选择安装目录的安装版
+dist/desktop/1.2.15/LinChat-Portable-1.2.15.exe    便携版
+dist/desktop/1.2.15/latest.yml                  自动更新版本与 SHA-512 清单
 dist/server/linchat-windows-amd64.exe           独立 Windows 服务端
 dist/server/linchat-linux-amd64                 独立 Linux 服务端
 ```
