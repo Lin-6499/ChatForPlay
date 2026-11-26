@@ -67,7 +67,8 @@ func migrateGames(db *sql.DB) error {
 	CREATE INDEX IF NOT EXISTS campaign_turns_queue ON campaign_turns(campaign_id,status,id);
 	CREATE TABLE IF NOT EXISTS campaign_turn_runtime (
 	  turn_id INTEGER PRIMARY KEY REFERENCES campaign_turns(id),
-	  actor TEXT NOT NULL, deadline_at INTEGER NOT NULL, input_version INTEGER NOT NULL
+	  actor TEXT NOT NULL, deadline_at INTEGER NOT NULL, input_version INTEGER NOT NULL,
+	  context_json TEXT NOT NULL DEFAULT ''
 	);
 	CREATE TABLE IF NOT EXISTS campaign_flow (
 	  campaign_id INTEGER PRIMARY KEY REFERENCES campaigns(id), mode TEXT NOT NULL,
@@ -126,6 +127,6 @@ func migrateGames(db *sql.DB) error {
 	  stream_at INTEGER NOT NULL DEFAULT 0, complete_at INTEGER NOT NULL DEFAULT 0,
 	  fail_at INTEGER NOT NULL DEFAULT 0
 	);
-	PRAGMA user_version=8;`)
+	PRAGMA user_version=9;`)
 	return err
 }

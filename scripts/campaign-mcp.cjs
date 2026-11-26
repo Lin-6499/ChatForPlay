@@ -36,6 +36,7 @@ const outcome = {
   }, required: ['narration', 'phase', 'changes'], additionalProperties: false,
 }
 const tools = [
+  ['campaign_heartbeat', 'Renew an unexpired running lease while actively hosting. Cannot revive an expired lease or extend the absolute attempt deadline. Use the original lease and host identity.', 'POST', a => `/turns/${a.turn_id}/heartbeat`, { turn_id: integer, lease: string }, ['turn_id', 'lease']],
   ['campaign_capabilities', 'Read server version, protocol, rule identifier and supported capabilities before hosting. Read the linked protocol documentation; never assume an old client has new tools.', 'GET', '/capabilities', {}],
   ['campaign_recap', 'Read a source-based public recap of saved summary, recent narration, unresolved objectives and confirmed facts. Does not generate or publish new canon.', 'GET', '/recap', {}],
   ['campaign_lore', 'Read campaign chapters, NPCs, quests, clues and durable facts maintained by the owner. Secret entries require explicit token secret permission. Never reveal secrets in public narration. Archived entries are not current facts.', 'GET', '/lore', {}],
@@ -51,7 +52,7 @@ const tools = [
   ['campaign_dm_notes', 'Read DM secrets. Requires explicit secret permission; never copy this content to public messages without owner approval.', 'GET', '/dm-notes', {}],
   ['campaign_state', 'Read current phase, revision and public scene.', 'GET', '/state', {}],
   ['campaign_turns', 'Read queued/running/failed turns. Only one turn can run in a campaign.', 'GET', '/turns', {}],
-  ['campaign_claim', 'Claim the oldest queued turn in external mode. Returns its lease and base_version. Complete within 180 seconds.', 'POST', '/turns/claim', {}],
+  ['campaign_claim', 'Claim the oldest queued turn in external mode. Returns lease, base_version, tool_budget, deadline_at and resuming. A short lease lasts 180 seconds; heartbeat can renew only within the absolute attempt deadline. Resume with the original host and checkpoint, never reroll.', 'POST', '/turns/claim', {}],
   ['campaign_roll', 'Ask the server to roll audited dice. Never invent results. A running turn requires turn_id and lease.', 'POST', '/rolls', { ...operation, formula: string, reason: string, visibility: { type: 'string', enum: ['public', 'dm'] }, turn_id: integer, lease: string }, ['client_id', 'formula', 'reason']],
   ['campaign_complete', 'Atomically publish narration and current resource changes, then release the claimed turn. Historical/background/rule changes must be proposals.', 'POST', a => `/turns/${a.turn_id}/complete`, { ...operation, turn_id: integer, version: integer, lease: string, outcome }, ['client_id', 'turn_id', 'version', 'lease', 'outcome']],
   ['campaign_fail', 'Release a claimed turn as failed so the owner can retry or take over. Saved dice are retained. Use a safe reason code, never send credentials or raw provider errors.', 'POST', a => `/turns/${a.turn_id}/fail`, { ...operation, turn_id: integer, lease: string, reason: { type: 'string', enum: ['unknown', 'connection', 'model_response', 'tool_error', 'cancelled'] } }, ['client_id', 'turn_id', 'lease']],

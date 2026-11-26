@@ -50,15 +50,15 @@ async function hostTurn(turn, context) {
   for (let step = 0; step < budget; step++) {
     let record = saved.state.steps[step]
     if (!record) {
-    await renew()
-    const response = await fetch(base + '/chat/completions', { method: 'POST', redirect: 'error', signal: AbortSignal.any([deadline, AbortSignal.timeout(50000)]),
-      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model, messages, tools: hostTools, tool_choice: 'required', parallel_tool_calls: false, max_tokens: 2400, stream: true }) })
-    if (!response.ok) throw Error(`Model service HTTP ${response.status}`)
-    const answer = await modelStream(response, turn.kind === 'summary' ? 'summary' : 'narration', publish)
-    if (answer?.tool_calls?.length !== 1) throw Error('Expected one tool call')
-    record = { answer: { role: 'assistant', content: null, tool_calls: answer.tool_calls } }
-    saved.state.steps.push(record); saved.save()
+      await renew()
+      const response = await fetch(base + '/chat/completions', { method: 'POST', redirect: 'error', signal: AbortSignal.any([deadline, AbortSignal.timeout(50000)]),
+        headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, messages, tools: hostTools, tool_choice: 'required', parallel_tool_calls: false, max_tokens: 2400, stream: true }) })
+      if (!response.ok) throw Error(`Model service HTTP ${response.status}`)
+      const answer = await modelStream(response, turn.kind === 'summary' ? 'summary' : 'narration', publish)
+      if (answer?.tool_calls?.length !== 1) throw Error('Expected one tool call')
+      record = { answer: { role: 'assistant', content: null, tool_calls: answer.tool_calls } }
+      saved.state.steps.push(record); saved.save()
     }
     messages.push(record.answer)
     const call = record.answer.tool_calls[0], args = JSON.parse(call.function.arguments)

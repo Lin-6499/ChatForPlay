@@ -1,11 +1,12 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
-const os = require('node:os')
 const path = require('node:path')
 const { checkpoint } = require('./campaign-checkpoint.cjs')
 test('checkpoint preserves pending tool input and receipts without credential material', () => {
-  const dir = fs.mkdtempSync(path.join(process.env.TEMP || os.tmpdir(), 'linchat-bot-checkpoint-'))
+  const output = path.resolve('dist/verification/reliability')
+  fs.mkdirSync(output, { recursive: true })
+  const dir = fs.mkdtempSync(path.join(output, 'bot-checkpoint-'))
   const env = { LINCHAT_BOT_STATE_DIR: dir, LINCHAT_CAMPAIGN_URL: 'https://example.test/api/v1/campaigns/1',
     LINCHAT_AGENT_TOKEN: 'token-must-not-be-written', MODEL_API_KEY: 'key-must-not-be-written', MODEL_ID: 'fixture' }
   const turn = { id: 1, event_id: 2, base_version: 3 }

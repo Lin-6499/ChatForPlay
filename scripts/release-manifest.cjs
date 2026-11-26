@@ -24,8 +24,8 @@ const files = [
     artifacts.push({ path: file, bytes: fs.statSync(full).size, sha256: h.digest('hex') })
   }
   const manifest = { version, created: new Date().toISOString(), cloud: 'https://chat.linblog.site', artifacts,
-    verification: ['dist/verification/quick-replies/results.json', 'dist/verification/layout-release/build-binding.json', 'dist/verification/flow/results.json', 'dist/verification/memory/results.json', 'dist/verification/cloud-check-results.json'],
-    verificationScope: 'Headless titlebar CSP, compact campaign layout, quick replies, reading position, joint actions and memory regressions; Go tests, packaged source/server binding and public deployment asset checks. No visible client or installer launched.' }
+    verification: ['dist/verification/reliability/results.json', 'dist/verification/reliability/joint-budget.json', 'dist/verification/reliability/build-binding.json', 'dist/verification/quick-replies/results.json', 'dist/verification/entertainment-check-results.json'],
+    verificationScope: 'Isolated builtin/external checkpoint and lease/budget tests; headless supplement draft, pending-review pagination and incumbent regressions; packaged source/server binding. No paid-model or visible installer test.' }
   fs.writeFileSync(path.join(root, 'dist', 'release-manifest.json'), JSON.stringify(manifest, null, 2))
   const installer = artifacts[0]
   const filename = path.basename(installer.path)

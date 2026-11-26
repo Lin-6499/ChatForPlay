@@ -513,3 +513,9 @@ JSON 请求体上限 64 KiB，未知字段会被拒绝；下文标为可省略�
 全员收集、联合回合的 `context.turn_actions`、行动补充与失败原因见 [ACTION_FLOW.md](ACTION_FLOW.md)。
 能力发现 `/capabilities`、房主诊断 `/host-diagnostics` 及统一接入阅读顺序见 [HOST_INTEGRATION.md](HOST_INTEGRATION.md)。
 联合回合检定必须使用各玩家各自的event_id，不把所有检定归到turn.event_id。
+
+## 回合恢复与待审核分页（1.2.14）
+
+领取新增tool_budget/deadline_at/resuming，有效短租约可通过 `/turns/{turn}/heartbeat` 续租，
+但不能越过12分钟绝对截止时间。行动一经领取即冻结补充，原身份／版本匹配才可续跑。
+记忆建议支持 `paged=1&status=pending&before=游标`。详见 [TURN_RECOVERY.md](TURN_RECOVERY.md)。
