@@ -18,6 +18,9 @@ type gameTurn struct {
 	StartedAt   int64  `json:"started_at"`
 	Error       string `json:"error"`
 	Lease       string `json:"lease,omitempty"`
+	ToolBudget  int    `json:"tool_budget,omitempty"`
+	DeadlineAt  int64  `json:"deadline_at,omitempty"`
+	Resuming    bool   `json:"resuming,omitempty"`
 }
 
 func (a *app) gameTurns(r *http.Request, g gameActor) (any, error) {
@@ -52,6 +55,9 @@ func checkGameLease(tx *sql.Tx, c campaign, g gameActor, turnID int64, lease str
 	}
 	if c.Version != version {
 		return gameFail(409, "战役状态已变更，主持结果未发布")
+	}
+	if err := checkAttemptDeadline(tx, turnID); err != nil {
+		return err
 	}
 	return nil
 }
@@ -99,7 +105,11 @@ func (a *app) claimGame(cid int64, g gameActor) (*gameTurn, error) {
 		return nil, err
 	}
 	if t.Status == "running" {
-		if time.Now().UnixMilli()-t.StartedAt > 180000 {
+		hardExpired, err := gameAttemptExpired(tx, t.ID)
+		if err != nil {
+			return nil, err
+		}
+		if time.Now().UnixMilli()-t.StartedAt > 180000 || hardExpired {
 			if _, err = tx.Exec("UPDATE campaign_turns SET status='failed',lease='',error='主持回合超时，请房主重试' WHERE id=?", t.ID); err != nil {
 				return nil, err
 			}
@@ -113,6 +123,14 @@ func (a *app) claimGame(cid int64, g gameActor) (*gameTurn, error) {
 			return nil, gameFail(409, "上个主持回合超时，请房主重试或跳过")
 		}
 		if claimant == g.key() {
+			var deadline int64
+			_ = tx.QueryRow("SELECT deadline_at FROM campaign_turn_runtime WHERE turn_id=?", t.ID).Scan(&deadline)
+			t.DeadlineAt = deadline
+			var actions int
+			if err := tx.QueryRow("SELECT count(*) FROM campaign_collected_actions WHERE turn_id=?", t.ID).Scan(&actions); err != nil {
+				return nil, err
+			}
+			t.ToolBudget = gameToolBudget(actions)
 			return &t, nil
 		}
 		return nil, gameFail(409, "其他主持人正在处理此战役")
@@ -120,10 +138,33 @@ func (a *app) claimGame(cid int64, g gameActor) (*gameTurn, error) {
 	if t.Status == "failed" {
 		return nil, gameFail(409, "有失败的行动待房主重试或跳过")
 	}
+	t.Resuming = t.StartedAt != 0
+	var originalActor string
+	var inputVersion int64
+	err = tx.QueryRow("SELECT actor,input_version FROM campaign_turn_runtime WHERE turn_id=?", t.ID).Scan(&originalActor, &inputVersion)
+	if err != nil && err != sql.ErrNoRows {
+		return nil, err
+	}
+	if originalActor != "" && originalActor != g.key() {
+		return nil, gameFail(409, "此回合已有原主持检查点，请使用原主持恢复或由房主接管／跳过，不能换身份重新执行")
+	}
+	if originalActor != "" && inputVersion != c.Version {
+		return nil, gameFail(409, "检查点之后战役版本已改变，不能把旧工具决策套入新状态，请房主接管或跳过")
+	}
 	t.Status = "running"
 	t.BaseVersion = c.Version
 	t.StartedAt = time.Now().UnixMilli()
 	t.Lease = randomToken(24)
+	t.DeadlineAt = time.Now().Add(gameAttemptLimit).UnixMilli()
+	var actions int
+	if err = tx.QueryRow("SELECT count(*) FROM campaign_collected_actions WHERE turn_id=?", t.ID).Scan(&actions); err != nil {
+		return nil, err
+	}
+	t.ToolBudget = gameToolBudget(actions)
+	if _, err = tx.Exec(`INSERT INTO campaign_turn_runtime(turn_id,actor,deadline_at,input_version) VALUES(?,?,?,?)
+	  ON CONFLICT(turn_id) DO UPDATE SET deadline_at=excluded.deadline_at`, t.ID, g.key(), t.DeadlineAt, c.Version); err != nil {
+		return nil, err
+	}
 	_, err = tx.Exec("UPDATE campaign_turns SET status='running',claimant=?,lease=?,base_version=?,started_at=?,error='' WHERE id=?", g.key(), t.Lease, t.BaseVersion, t.StartedAt, t.ID)
 	if err != nil {
 		return nil, err
@@ -386,11 +427,25 @@ func (a *app) gameRetry(r *http.Request, g gameActor) (any, error) {
 		if tx.QueryRow("SELECT status,started_at FROM campaign_turns WHERE campaign_id=? AND id=?", c.ID, turnID).Scan(&status, &started) != nil {
 			return nil, gameFail(404, "回合不存在")
 		}
-		if status != "failed" && (status != "running" || time.Now().UnixMilli()-started <= 180000) {
+		hardExpired, err := gameAttemptExpired(tx, turnID)
+		if err != nil {
+			return nil, err
+		}
+		if status != "failed" && (status != "running" || time.Now().UnixMilli()-started <= 180000 && !hardExpired) {
 			return nil, gameFail(409, "只能处理失败或已超时的回合")
 		}
 		if c.Version != in.Version {
 			return nil, gameFail(409, "请刷新战役状态")
+		}
+		if !in.Skip {
+			var inputVersion int64
+			err := tx.QueryRow("SELECT input_version FROM campaign_turn_runtime WHERE turn_id=?", turnID).Scan(&inputVersion)
+			if err != nil && err != sql.ErrNoRows {
+				return nil, err
+			}
+			if err == nil && inputVersion != c.Version {
+				return nil, gameFail(409, "回合检查点之后战役版本已改变，请房主接管或跳过，不可直接续跑旧决策")
+			}
 		}
 		next := "queued"
 		if in.Skip {

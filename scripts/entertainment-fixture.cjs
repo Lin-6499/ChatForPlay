@@ -11,6 +11,7 @@ async function fixture() {
   const out=path.join(root,'dist','verification')
   fs.mkdirSync(out,{recursive:true})
   const data=fs.mkdtempSync(path.join(out,'campaign-demo-'))
+  process.env.LINCHAT_BOT_STATE_DIR=path.join(data,'bot-state')
   const reserve=net.createServer(), port=await listen(reserve)
   await new Promise(resolve=>reserve.close(resolve))
   const url=`http://127.0.0.1:${port}`

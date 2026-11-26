@@ -281,6 +281,7 @@ func (a *app) registerGames(m *http.ServeMux) {
 		"GET /api/v1/campaigns/{id}/turns":                   a.gameTurns, "POST /api/v1/campaigns/{id}/turns/claim": a.gameClaimHTTP,
 		"POST /api/v1/campaigns/{id}/turns/{turn}/complete":                  a.gameCompleteHTTP,
 		"POST /api/v1/campaigns/{id}/turns/{turn}/stream":                    a.gameStreamHTTP,
+		"POST /api/v1/campaigns/{id}/turns/{turn}/heartbeat":                 a.gameHeartbeat,
 		"GET /api/v1/campaigns/{id}/lore":                                    a.gameLoreList,
 		"POST /api/v1/campaigns/{id}/lore":                                   a.gameLoreSave,
 		"POST /api/v1/campaigns/{id}/lore/focus":                             a.gameLoreFocus,

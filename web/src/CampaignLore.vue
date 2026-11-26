@@ -3,14 +3,15 @@ import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, ref, w
 import type { Campaign, GameAPI } from './game-types'
 type Entry = { id: number; kind: string; title: string; content: string; visibility: string; status: string; in_context: boolean; version: number; updated_at: number; chapter_id: number; progress: string }
 type Suggestion = { id: number; event_id: number; turn_id: number; status: string; source_content: string; suggestion: { kind: string; title: string; content: string } }
+type SuggestionPage = { items: Suggestion[]; total_pending: number; has_more: boolean; next_before: number; status: string }
 const props = defineProps<{ campaign: Campaign; api: GameAPI; owner: boolean; revision: number }>()
 const emit = defineEmits<{ changed: [] }>()
 const kinds: Record<string, string> = { chapter: '剧本章节', npc: '人物 / NPC', quest: '任务', clue: '线索', fact: '长期事实' }
 const entries = ref<Entry[]>([]), history = ref<Entry[]>([])
 const suggestions = ref<Suggestion[]>([]), suggestionID = ref(0), focusChapter = ref(0)
+const suggestionFilter = ref('pending'), suggestionCursors = ref([0]), totalPending = ref(0), nextBefore = ref(0), reading = ref(false)
 const progressLabels: Record<string, string> = { not_started: '未开始', in_progress: '进行中', completed: '已完成', failed: '未达成', undiscovered: '未发现', discovered: '已发现', resolved: '已解决' }
 const chapterOptions = computed(() => entries.value.filter(e => e.kind === 'chapter' && e.status === 'active'))
-const pendingSuggestions = computed(() => suggestions.value.filter(e => e.status === 'pending'))
 const progressOptions = computed(() => draft.value.kind === 'quest' ? ['not_started', 'in_progress', 'completed', 'failed'] : draft.value.kind === 'clue' ? ['undiscovered', 'discovered', 'resolved'] : [])
 const search = ref(''), kind = ref(''), archived = ref(false)
 const loading = ref(true), busy = ref(false), error = ref(''), notice = ref(''), editing = ref(false)
@@ -36,17 +37,28 @@ let generation = 0, stopped = false, active = true
 const operations = new Map<string, string>()
 async function load() {
   const gen = ++generation
+  reading.value = true
+  const before = suggestionCursors.value.at(-1) || 0
   try {
     const [data, proposed] = await Promise.all([
       props.api<Entry[]>(`/v1/campaigns/${props.campaign.id}/lore`),
-      props.owner ? props.api<Suggestion[]>(`/v1/campaigns/${props.campaign.id}/memory-suggestions`) : Promise.resolve([]),
+      props.owner ? props.api<SuggestionPage>(`/v1/campaigns/${props.campaign.id}/memory-suggestions?paged=1&status=${suggestionFilter.value}${before ? `&before=${before}` : ''}`) : Promise.resolve({ items: [], total_pending: 0, has_more: false, next_before: 0, status: 'pending' }),
     ])
     if (!stopped && gen === generation) {
-      entries.value = data; suggestions.value = proposed; error.value = ''
+      entries.value = data; suggestions.value = proposed.items; totalPending.value = proposed.total_pending; nextBefore.value = proposed.next_before; error.value = ''
+      if (!proposed.items.length && suggestionCursors.value.length > 1) { suggestionCursors.value.pop(); void load(); return }
       if (!editing.value && selected.value) selected.value = data.find(e => e.id === selected.value!.id) || null
     }
   } catch (e) { if (gen === generation) error.value = e instanceof Error ? e.message : '资料暂时无法读取，请重试' }
-  finally { if (gen === generation) loading.value = false }
+  finally { if (gen === generation) { loading.value = false; reading.value = false } }
+}
+function changeSuggestionPage(direction: 'next' | 'previous' | 'filter') {
+  if (busy.value || reading.value) return
+  if (direction === 'next' && nextBefore.value) suggestionCursors.value.push(nextBefore.value)
+  else if (direction === 'previous' && suggestionCursors.value.length > 1) suggestionCursors.value.pop()
+  else if (direction === 'filter') suggestionCursors.value = [0]
+  else return
+  suggestions.value = []; void load()
 }
 async function open(entry: Entry | 'new', discard = false) {
   if (busy.value) return
@@ -132,7 +144,14 @@ onBeforeUnmount(() => { stopped = true; generation++ })
     <div class="game-section-heading"><div><h3>剧本与记忆</h3><p>把章节、人物与重要事实留在战役里，由房主确认，不让推测变成既定事实。</p></div><button v-if="owner" class="game-button" :disabled="busy" @click="open('new')">新建资料</button></div>
     <p class="game-helper">公开且勾选“供主持参考”的有效资料会加入 AI 上下文，目前 {{ included.count }} 条。{{ included.omitted ? `另有 ${included.omitted} 条超出 24000 字预算；请取消无关条目后再主持。` : '秘密资料只供房主及获准的外部主持读取，不发送给内置公开模型。' }}</p>
     <div v-if="owner" class="lore-focus"><label>本幕章节<select v-model.number="focusChapter" aria-label="本幕章节"><option :value="0">选择公开章节</option><option v-for="e in chapterOptions.filter(e => e.visibility === 'public')" :key="e.id" :value="e.id">{{ e.title }}</option></select></label><button class="game-button" :disabled="busy || !focusChapter || !!campaign.active_turn || dirty" @click="action('lore/focus', { version: campaign.version, chapter_id: focusChapter })">使用本幕资料</button><p class="game-helper">一次选择本章及其关联的有效公开资料，取消其他参考条目。{{ dirty ? '请先保存当前修改。' : '长期事实如需跨幕使用，可在切换后单独勾选。' }}</p></div>
-    <details v-if="owner" class="lore-suggestions"><summary>待确认的记忆建议 · {{ pendingSuggestions.length }} 条</summary><p class="game-helper">建议来自正式回合，不自动成为事实。载入编辑区后请核对原文，补充章节与进度，再决定是否保存。</p><p v-if="!pendingSuggestions.length" class="game-helper">暂无待确认建议。支持新版协议的主持可在完成回合时提供建议。</p><article v-for="s in pendingSuggestions" :key="s.id"><b>{{ s.suggestion.title }}</b><small>来源：回合 #{{ s.turn_id }} · 正式叙述 #{{ s.event_id }}</small><p class="lore-prose">{{ s.suggestion.content }}</p><details><summary>核对来源原文</summary><p class="lore-prose">{{ s.source_content }}</p></details><div class="game-actions"><button class="game-button" :disabled="busy" @click="useSuggestion(s)">核对并编辑</button><button class="text-button" :disabled="busy" @click="action(`memory-suggestions/${s.id}/reject`, {})">忽略此建议</button></div></article></details>
+    <details v-if="owner" class="lore-suggestions">
+      <summary>待确认的记忆建议 · {{ totalPending }} 条</summary>
+      <p class="game-helper">建议来自正式回合，不自动成为事实。默认优先查看待确认项，已处理记录可筛选查阅。</p>
+      <label class="lore-suggestion-filter">记忆建议状态<select v-model="suggestionFilter" aria-label="记忆建议状态" :disabled="busy || reading" @change="changeSuggestionPage('filter')"><option value="pending">待确认</option><option value="accepted">已采用</option><option value="rejected">已忽略</option><option value="all">全部记录</option></select></label>
+      <p v-if="!suggestions.length && !reading" class="game-helper">当前筛选下暂无建议。支持新版协议的主持可在完成回合时提供建议。</p>
+      <article v-for="s in suggestions" :key="s.id"><b>{{ s.suggestion.title }}</b><small>来源：回合 #{{ s.turn_id }} · 正式叙述 #{{ s.event_id }} · {{ ({ pending: '待确认', accepted: '已采用', rejected: '已忽略' } as Record<string,string>)[s.status] }}</small><p class="lore-prose">{{ s.suggestion.content }}</p><details><summary>核对来源原文</summary><p class="lore-prose">{{ s.source_content }}</p></details><div v-if="s.status === 'pending'" class="game-actions"><button class="game-button" :disabled="busy" @click="useSuggestion(s)">核对并编辑</button><button class="text-button" :disabled="busy" @click="action(`memory-suggestions/${s.id}/reject`, {})">忽略此建议</button></div></article>
+      <nav class="game-actions" aria-label="记忆建议分页"><button class="text-button" :disabled="busy || reading || suggestionCursors.length === 1" @click="changeSuggestionPage('previous')">上一页建议</button><span class="game-helper">{{ reading ? '正在读取…' : `第 ${suggestionCursors.length} 页 · 每页最多20条` }}</span><button class="text-button" :disabled="busy || reading || !nextBefore" @click="changeSuggestionPage('next')">下一页建议</button></nav>
+    </details>
     <p v-if="error" class="game-error" role="alert">{{ error }} <button class="text-button" @click="load">重新读取资料</button></p>
     <p v-if="notice" class="game-helper" role="status">{{ notice }}</p>
     <div v-if="discardTarget" class="lore-confirm" role="alert"><p>当前有未保存的修改。是否放弃这些修改并打开另一条资料？</p><div class="game-actions"><button class="game-button" @click="open(discardTarget!, true)">放弃修改并继续</button><button class="text-button" @click="discardTarget = null">保留当前编辑</button></div></div>
@@ -204,6 +223,8 @@ onBeforeUnmount(() => { stopped = true; generation++ })
 .lore-suggestions article { padding: 16px 0; border-bottom: 1px solid var(--line); }
 .lore-suggestions article:last-child { border: 0; }
 .lore-suggestions small { display: block; color: var(--muted); margin-top: 6px; line-height: 1.6; }
+.lore-suggestion-filter { display: grid; gap: 8px; max-width: 260px; color: var(--muted); font-size: 12px; margin: 16px 0; }
+.lore-suggestion-filter select { padding: 10px 12px; background: var(--field); color: var(--text); border: 1px solid var(--line); border-radius: 7px; }
 @media (max-width: 900px) {
   .lore-layout { grid-template-columns: minmax(0, 1fr); gap: 24px; }
   .lore-list { max-height: 220px; }

@@ -176,11 +176,12 @@ func (a *app) gameFlowRelease(r *http.Request, g gameActor) (any, error) {
 }
 
 type flowAction struct {
-	EventID     int64            `json:"event_id"`
-	UserID      int64            `json:"user_id"`
-	Actor       string           `json:"actor"`
-	Content     string           `json:"content"`
-	Supplements []map[string]any `json:"supplements"`
+	EventID       int64            `json:"event_id"`
+	UserID        int64            `json:"user_id"`
+	Actor         string           `json:"actor"`
+	Content       string           `json:"content"`
+	Supplements   []map[string]any `json:"supplements"`
+	CanSupplement bool             `json:"can_supplement"`
 }
 
 func (a *app) turnActionDetails(cid, tid, eid int64) ([]flowAction, error) {
@@ -205,6 +206,13 @@ func (a *app) turnActionDetails(cid, tid, eid int64) ([]flowAction, error) {
 		return nil, err
 	}
 	for i := range out {
+		var claimed int
+		if err := a.store.QueryRow(`SELECT count(*) FROM campaign_turns WHERE campaign_id=?
+		  AND (event_id=? OR id IN(SELECT turn_id FROM campaign_collected_actions WHERE event_id=?))
+		  AND (started_at<>0 OR status<>'queued')`, cid, out[i].EventID, out[i].EventID).Scan(&claimed); err != nil {
+			return nil, err
+		}
+		out[i].CanSupplement = claimed == 0
 		supp, err := a.store.Query(`SELECT e.id,e.content FROM campaign_action_supplements s JOIN campaign_events e ON e.id=s.event_id WHERE s.base_event_id=? AND e.campaign_id=? ORDER BY e.id`, out[i].EventID, cid)
 		if err != nil {
 			return nil, err
@@ -235,19 +243,19 @@ func (a *app) gameFlowRead(r *http.Request, g gameActor) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	rows, err := a.store.Query(`SELECT id,event_id,kind,status,error,started_at FROM campaign_turns WHERE campaign_id=? AND status<>'done' ORDER BY id LIMIT 20`, c.ID)
+	rows, err := a.store.Query(`SELECT id,event_id,kind,status,error,started_at,COALESCE((SELECT deadline_at FROM campaign_turn_runtime WHERE turn_id=campaign_turns.id),0) FROM campaign_turns WHERE campaign_id=? AND status<>'done' ORDER BY id LIMIT 20`, c.ID)
 	if err != nil {
 		return nil, err
 	}
 	queue := []map[string]any{}
 	for rows.Next() {
-		var id, event, started int64
+		var id, event, started, deadline int64
 		var kind, status, message string
-		if err = rows.Scan(&id, &event, &kind, &status, &message, &started); err != nil {
+		if err = rows.Scan(&id, &event, &kind, &status, &message, &started, &deadline); err != nil {
 			rows.Close()
 			return nil, err
 		}
-		queue = append(queue, map[string]any{"turn_id": id, "event_id": event, "kind": kind, "status": status, "error": message, "started_at": started})
+		queue = append(queue, map[string]any{"turn_id": id, "event_id": event, "kind": kind, "status": status, "error": message, "started_at": started, "deadline_at": deadline})
 	}
 	err = rows.Err()
 	rows.Close()
@@ -318,6 +326,14 @@ func (a *app) gameSupplement(r *http.Request, g gameActor) (any, error) {
 		}
 		if c.Phase == "paused" {
 			return nil, gameFail(409, "战役暂停中")
+		}
+		var claimed int
+		if err := tx.QueryRow(`SELECT count(*) FROM campaign_turns WHERE campaign_id=?
+		  AND (event_id=? OR id IN(SELECT turn_id FROM campaign_collected_actions WHERE event_id=?)) AND started_at<>0`, c.ID, base, base).Scan(&claimed); err != nil {
+			return nil, err
+		}
+		if claimed > 0 {
+			return nil, gameFail(409, "行动曾被主持领取，恢复中的原输入已冻结；请通过新行动补充，不可改动旧检查点")
 		}
 		var pending int
 		if err := tx.QueryRow(`SELECT (SELECT count(*) FROM campaign_turns t WHERE t.campaign_id=? AND t.status='queued'
