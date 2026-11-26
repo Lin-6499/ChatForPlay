@@ -341,6 +341,7 @@ function connect() {
     try {
       const event = JSON.parse(e.data)
       if (event.type === 'hello') {
+        window.dispatchEvent(new Event('linchat:reconnected'))
         gameRevision.value++
         await Promise.all([refreshConversations(), syncActive(), loadMembers()])
         await refreshPeople()

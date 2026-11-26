@@ -3,6 +3,10 @@ import { computed, nextTick, onActivated, onDeactivated, onBeforeUnmount, onMoun
 import Icon from './Icon.vue'
 import DiceRoll from './DiceRoll.vue'
 import HostStream from './HostStream.vue'
+import CampaignLore from './CampaignLore.vue'
+import CampaignRecap from './CampaignRecap.vue'
+import CampaignFlow from './CampaignFlow.vue'
+import HostDiagnostics from './HostDiagnostics.vue'
 import AbilityChecks from './AbilityChecks.vue'
 import { phases, rulesets, modes, abilityNames, type Campaign, type Character, type GameEvent, type Turn, type Proposal, type AgentToken, type AISettings, type GameAPI, type GameUser, type DiceInput, type DiceReceipt } from './game-types'
 import './entertainment.css'
@@ -51,7 +55,7 @@ const validRecipient = computed(() => privateRecipients.value.some(p => p.id ===
 const myCharacter = computed(() => characters.value.find(c => c.user_id === props.me.id))
 const pendingTurn = computed(() => [...turns.value].reverse().find(t => t.status !== 'done'))
 const tabs = computed(() => [
-  { id: 'journal', label: '冒险日志' }, { id: 'characters', label: '角色卡' }, { id: 'checks', label: '行动检定' }, { id: 'proposals', label: '设定提案' },
+  { id: 'journal', label: '冒险日志' }, { id: 'characters', label: '角色卡' }, { id: 'checks', label: '行动检定' }, { id: 'lore', label: '剧本与记忆' }, { id: 'proposals', label: '设定提案' },
   ...(isOwner.value ? [{ id: 'host', label: '主持台' }, { id: 'agents', label: '智能体接入' }] : []),
 ])
 const showCreate = ref(false), showAI = ref(false), showDice = ref(false), editCharacter = ref<Character | null>(null)
@@ -64,6 +68,7 @@ const proposalForm = ref({ kind: 'scene', content: '', character_id: 0 })
 const tokenForm = ref({ label: '', secrets: false }), issuedToken = ref<{ token: string; base_url: string; expires_at: number } | null>(null)
 const aiForm = ref({ base_url: 'https://api.x.ai/v1', model: 'grok-4.7', api_key: '', enabled: true, remove_key: false })
 let requestGeneration = 0, stopped = false, active = true, timer: ReturnType<typeof setInterval>, refreshTimer: ReturnType<typeof setTimeout> | undefined
+let refreshPending = false
 const operationIDs = new Map<string, string>()
 const drafts = new Map<number, { content: string; kind: string; recipient: number; selected: SelectedReply | null; options: string; target: number }>()
 const uid = () => Array.from(crypto.getRandomValues(new Uint8Array(18)), n => n.toString(16).padStart(2, '0')).join('')
@@ -86,7 +91,9 @@ async function run(task: () => Promise<void>) {
   finally { busy.value = false }
 }
 async function refresh() {
-  if (refreshing.value || stopped || !active || (current.value && !journalReady.value)) return
+  if (stopped || !active) return
+  if (refreshing.value || (current.value && !journalReady.value)) { refreshPending = true; return }
+  refreshPending = false
   refreshing.value = true
   const generation = requestGeneration, cid = current.value?.id
   let listed = false
@@ -113,7 +120,10 @@ async function refresh() {
       if (!listed) listError.value = message(e)
     }
   }
-  finally { refreshing.value = false; loading.value = false }
+  finally {
+    refreshing.value = false; loading.value = false
+    if (refreshPending && active && !stopped) scheduleRefresh()
+  }
 }
 async function select(c: Campaign, afterCreate = false) {
   if (busy.value && !afterCreate) return
@@ -154,6 +164,7 @@ async function select(c: Campaign, afterCreate = false) {
     members.value = users.members.filter(m => m.id !== c.bot_id); canOlder.value = hasOlder
     if (!validRecipient.value) recipient.value = privateRecipients.value[0]?.id || 0
     journalReady.value = true
+    if (refreshPending) scheduleRefresh()
     await loadReplyPrompt(c.id, generation)
     if (generation !== requestGeneration) return
     if (previousTab && tabs.value.some(t => t.id === previousTab)) await chooseTab(previousTab)
@@ -286,7 +297,13 @@ async function older() {
     events.value = [...log, ...events.value]; canOlder.value = log.length === 80
   })
 }
-function scheduleRefresh() { if (!active) return; clearTimeout(refreshTimer); refreshTimer = setTimeout(() => { void refresh() }, 180) }
+function scheduleRefresh() {
+  refreshPending = true
+  // Throttle rather than debounce: sustained notifications must not postpone
+  // the refresh forever, and notifications during a request get one trailing read.
+  if (!active || stopped || refreshTimer !== undefined) return
+  refreshTimer = setTimeout(() => { refreshTimer = undefined; void refresh() }, 180)
+}
 const modalOpen = computed(() => showCreate.value || showAI.value || showDice.value || !!editCharacter.value)
 let returnFocus: HTMLElement | null = null
 watch(modalOpen, async open => {
@@ -314,7 +331,7 @@ function dialogKey(event: KeyboardEvent) {
 }
 watch(() => props.revision, scheduleRefresh)
 onActivated(() => { active = true; scheduleRefresh() })
-onDeactivated(() => { active = false; clearTimeout(refreshTimer) })
+onDeactivated(() => { active = false; clearTimeout(refreshTimer); refreshTimer = undefined })
 function onVisible() { if (!document.hidden) scheduleRefresh() }
 onMounted(async () => {
   await refresh()
@@ -322,7 +339,7 @@ onMounted(async () => {
     campaigns.value.find(c => String(c.id) === savedView('campaign'))
   if (linked) await select(linked)
   else if (campaigns.value.length && !matchMedia('(max-width:760px)').matches) await select(campaigns.value[0])
-  timer = setInterval(() => { if (!document.hidden) void refresh() }, 15000)
+  timer = setInterval(() => { if (!document.hidden) void refresh() }, 3000)
   document.addEventListener('visibilitychange', onVisible)
 })
 onBeforeUnmount(() => { stopped = true; requestGeneration++; clearInterval(timer); clearTimeout(refreshTimer); document.removeEventListener('visibilitychange', onVisible); issuedToken.value = null; aiForm.value.api_key = '' })
@@ -351,13 +368,15 @@ onBeforeUnmount(() => { stopped = true; requestGeneration++; clearInterval(timer
       <nav class="game-tabs" aria-label="战役内容"><button v-for="t in tabs" :key="t.id" :class="{ active: tab === t.id }" :disabled="busy" :aria-current="tab === t.id ? 'page' : undefined" @click="chooseTab(t.id)">{{ t.label }}</button></nav>
       <p v-if="error && !showCreate && !showAI && !showDice && !editCharacter" class="game-error" role="alert">{{ error }}<button class="text-button" @click="error = ''; refresh()">刷新</button></p>
       <template v-if="tab === 'journal'">
+        <CampaignFlow :key="`flow-${current.id}`" :campaign="current" :api="api" :me="me" :members="members" :revision="revision" @changed="refresh" />
+        <CampaignRecap :key="current.id" :campaign-i-d="current.id" :api="api" :revision="current.version + revision" />
         <details class="game-scene" :open="!events.length"><summary><Icon name="book" :size="17" /><b>当前场景</b><span>{{ current.scene || '等待房主铺开第一幕' }}</span></summary><p>{{ current.scene || '房主可在主持台填写起始场景，再继续战役。' }}</p><div v-if="current.summary" class="game-summary"><h3>上次的故事</h3><p>{{ current.summary }}</p></div></details>
         <div v-if="pendingTurn?.status === 'failed' || (pendingTurn?.status === 'running' && Date.now() - pendingTurn.started_at > 180000)" class="game-turn-error" role="status"><div><b>主持暂未完成</b><p>{{ pendingTurn.error || '回合已超时，已掷骰结果会保留。' }}</p></div><template v-if="isOwner"><button class="game-button" :disabled="busy" @click="retry(pendingTurn)">重试</button><button class="text-button" :disabled="busy" @click="retry(pendingTurn, true)">跳过</button></template></div>
         <div ref="journal" class="game-journal" :data-scroll-key="scrollKey('journal')" :data-scroll-ready="journalReady" data-scroll-follow role="log" aria-label="战役日志">
           <button v-if="canOlder && events.length" class="history-button" :disabled="busy" @click="older">读取更早的记录</button>
           <div v-if="!events.length" class="game-journal-empty"><Icon name="book" :size="36" /><h3>第一幕，等你落笔</h3><p>准备角色卡，确认场景，然后由房主继续战役。<br />提交行动会写入存档；闲聊请使用右上角的群聊。</p><button v-if="!myCharacter" class="text-button" @click="newCharacter">创建我的角色<Icon name="arrow-right" :size="16" /></button></div>
           <article v-for="e in events" :key="e.id" class="game-entry" :class="[e.kind, { private: e.visibility !== 'public' }]" :data-event-id="e.id" :data-scroll-anchor="e.id">
-            <div class="game-entry-meta"><b>{{ e.kind === 'narration' || e.kind === 'summary' ? '主持人' : e.actor }}</b><span>{{ ({ action: '行动', roll: '服务器掷骰', summary: '本次摘要', narration: '叙述', setting: '设定更新', request: '主持请求', whisper: '私密消息' } as Record<string,string>)[e.kind] || e.kind }}</span><span v-if="e.visibility !== 'public'" class="game-secret-label"><Icon name="lock" :size="12" />{{ e.visibility === 'dm' ? '主持秘密' : '仅双方与房主' }}</span><time>{{ dateTime(e.created_at) }}</time></div>
+            <div class="game-entry-meta"><b>{{ e.kind === 'narration' || e.kind === 'summary' ? '主持人' : e.actor }}</b><span>{{ ({ action: '行动', action_supplement: '行动补充', roll: '服务器掷骰', summary: '本次摘要', narration: '叙述', setting: '设定更新', request: '主持请求', whisper: '私密消息' } as Record<string,string>)[e.kind] || e.kind }}</span><span v-if="e.visibility !== 'public'" class="game-secret-label"><Icon name="lock" :size="12" />{{ e.visibility === 'dm' ? '主持秘密' : '仅双方与房主' }}</span><time>{{ dateTime(e.created_at) }}</time></div>
             <div v-if="e.payload.roll" class="game-dice-result"><Icon name="dice" :size="27" /><strong>{{ e.payload.roll.total }}</strong><div><b>{{ e.payload.roll.formula }}</b><p>{{ e.content.split('\n')[0].split(' · ')[0] }}</p><small>实际骰子 {{ e.payload.roll.dice.join('、') }} · 保留 {{ e.payload.roll.kept.join('、') }} · 修正 {{ e.payload.roll.modifier >= 0 ? '+' : '' }}{{ e.payload.roll.modifier }}</small></div></div>
             <p v-else class="game-entry-text">{{ e.content }}</p>
             <button v-if="e.kind === 'check'" class="text-button" @click="chooseTab('checks')">查看检定与代价选择</button>
@@ -368,6 +387,7 @@ onBeforeUnmount(() => { stopped = true; requestGeneration++; clearInterval(timer
           <div class="game-compose-fields">
           <div v-if="replyError" class="game-reply-status" role="status">{{ replyError }}<button class="text-button" @click="loadReplyPrompt(current.id, requestGeneration)">重试</button></div>
           <section v-else-if="replyPrompt && composeKind === 'action'" class="game-quick-replies" aria-label="主持人快捷回复">
+            <small class="game-helper">对应主持叙述 #{{ replyPrompt.event_id }} · {{ replyPrompt.can_reply ? '待你提交，点击选项不会立即发送' : replyPrompt.answered ? '本组已回复' : '当前不可回复' }}</small>
             <b>{{ replyPrompt.answered ? '你已回复这组问题' : replyPrompt.can_reply ? '主持人等你回复' : replyPrompt.target_user_id && replyPrompt.target_user_id !== me.id ? '等待指定玩家回复' : '等待主持人继续' }}</b>
             <div v-if="replyPrompt.can_reply" class="game-reply-options">
               <button v-for="option in replyPrompt.options" :key="option.id" type="button" class="game-button" :disabled="busy" :aria-pressed="selectedReply?.eventID === replyPrompt.event_id && selectedReply?.optionID === option.id && draft === option.content" @click="chooseReply(option)">{{ option.label }}</button>
@@ -387,7 +407,7 @@ onBeforeUnmount(() => { stopped = true; requestGeneration++; clearInterval(timer
           <div class="game-compose-bottom"><span>{{ composeKind === 'action' ? current.auto_respond && current.mode !== 'manual' ? '提交后主持人将依次处理 · Ctrl + Enter 提交' : '行动写入日志，由房主继续主持' : composeKind === 'private' ? '私密消息不进入公开 AI 上下文' : '公开内容会同步到战役群聊' }}</span><button class="send-button" :disabled="busy || composing || !draft.trim() || (composeKind === 'action' && current.phase === 'paused') || (composeKind === 'private' && !validRecipient)" @click="submit">{{ composeKind === 'action' ? '提交行动' : composeKind === 'summary' ? '保存摘要' : '发送' }}<Icon name="send" :size="16" /></button></div>
         </footer>
       </template>
-      <div v-else class="game-tab-content" :data-scroll-key="scrollKey(tab)" :data-scroll-ready="journalReady && !busy">
+      <div v-else-if="tab !== 'lore'" class="game-tab-content" :data-scroll-key="scrollKey(tab)" :data-scroll-ready="journalReady && !busy">
         <template v-if="tab === 'characters'">
           <div class="game-section-heading"><div><h3>角色与资源</h3><p>生命值、状态、物品和法术资源随战役保存。</p></div><button v-if="!myCharacter" class="game-button" @click="newCharacter">创建我的角色</button></div>
           <p v-if="!characters.length" class="game-empty-small">还没有角色卡。你和伙伴都可以为自己创建一个角色。</p>
@@ -407,6 +427,7 @@ onBeforeUnmount(() => { stopped = true; requestGeneration++; clearInterval(timer
           <form class="game-form game-private-form" @submit.prevent="saveNotes"><h3><Icon name="lock" :size="18" />主持秘密</h3><p class="game-helper">仅房主和获准读取秘密的外部主持智能体可访问。内置公开主持不会读取这里；要揭露的线索请作为场景提案采纳。</p><label>幕后笔记<textarea v-model="noteDraft" rows="6" maxlength="16000" placeholder="NPC 动机、尚未揭露的真相、陷阱等。"></textarea></label><button class="game-button" :disabled="busy">保存秘密</button></form>
         </template>
         <template v-else-if="tab === 'agents' && isOwner">
+          <HostDiagnostics :key="current.id" :campaign-i-d="current.id" :api="api" :revision="revision" />
           <div class="game-section-heading"><div><h3>连接你的主持智能体</h3><p>令牌只授权当前战役，有效期 30 天，可随时撤销。</p></div></div>
           <form class="game-form" @submit.prevent="issueToken"><label>智能体名称<input v-model="tokenForm.label" maxlength="40" required placeholder="例如：Grok 跑团主持" /></label><label class="game-check"><input v-model="tokenForm.secrets" type="checkbox" />允许读取主持秘密、私密背景与私信</label><p class="game-helper">默认只可读取公开上下文、领取主持回合、掷骰、推进场景和提交设定提案。令牌不包含服务器或模型管理权限。</p><button class="game-button" :disabled="busy">创建战役令牌</button></form>
           <div v-if="issuedToken" class="game-token-result"><h3>令牌已创建，只在这里显示一次</h3><label>Bearer 令牌<input :value="issuedToken.token" readonly aria-label="新建智能体令牌" @focus="($event.target as HTMLInputElement).select()" /></label><label>战役 API 地址<input :value="issuedToken.base_url" readonly aria-label="战役 API 地址" @focus="($event.target as HTMLInputElement).select()" /></label><p>在外部智能体中保存后关闭此提示。请求带 <code>Authorization: Bearer …</code>；写入同时带 <code>X-LinChat: 1</code>。</p><button class="text-button" @click="issuedToken = null">已保存，关闭显示</button></div>
@@ -415,6 +436,7 @@ onBeforeUnmount(() => { stopped = true; requestGeneration++; clearInterval(timer
           <div class="game-token-list"><div v-for="t in tokens" :key="t.id"><span><b>{{ t.label }}</b><small>{{ t.revoked ? '已撤销' : `到期 ${dateTime(t.expires_at)}` }} · {{ t.secrets ? '含秘密权限' : '公开主持' }}</small></span><button v-if="!t.revoked" class="text-button danger" :disabled="busy" @click="revoke(t)">撤销</button></div></div>
         </template>
       </div>
+      <KeepAlive :max="5"><CampaignLore v-if="tab === 'lore'" :key="current.id" class="game-tab-content" :data-scroll-key="scrollKey('lore')" :campaign="current" :api="api" :owner="isOwner" :revision="revision" @changed="refresh" /></KeepAlive>
     </section>
     <section v-else class="game-welcome"><Icon name="dice" :size="48" /><h2>把聊天变成一场冒险</h2><p>创建一个战役，邀请伙伴带上角色入席。<br />由你、Grok 或其他智能体主持，故事与每次掷骰都留在这里。</p><button class="primary" @click="showCreate = true">创建第一场战役<Icon name="plus" :size="18" /></button><p v-if="error" class="game-error" role="alert">{{ error }}</p></section>
   </div>

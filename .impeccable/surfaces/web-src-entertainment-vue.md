@@ -14,6 +14,32 @@ related_targets: ["web/src/entertainment.css","web/src/game-types.ts","web/src/D
 - Headless Chromium verification includes the actual desktop preload with mocked IPC and isolated fixture data at 320×640, 820×600 and 1280×850. Covers choices, custom replies, stale prompts, long drafts, scene expansion and answered state.
 - Visual review corrected clipped input and controls in the first captures. Final compact captures show readable logs, full input and submit controls; production build and quick-reply regression passed. Evidence: `dist/verification/quick-replies/`.
 
+## Action flow and host integration · 1.2.12
+
+Continue the Operate identity without a new visual world. A collapsed journal queue exposes real participant identities, held submissions, explicit owner early-close confirmation, append-only supplements and safe retry controls. The queue scroll region is capped at40vh to preserve composer access. Host integration adds a plain diagnostic definition list inside the existing owner-only agents tab, not an ornamental dashboard.
+
+Five flow scenarios and three integration scenarios verify the actual controls with an isolated server. Group backend tests retain each actor/event_id, allow the second player's leased check, block future-round context and preserve retry identities. Capability tests cover protocol failure and credential-safe errors. Desktop1264 and mobile390/320 renders keep names, controls and diagnostic times readable; no online claim is inferred from old activity. Review verdict: ship, scoped to these extensions.
+
+## Progress and memory organization · 1.2.11
+
+Operate extension, same visual identity: chapter focus is an inline explicit action; progress is a field independent of archive. Pending memory suggestions sit behind a counted disclosure with authoritative source text, never mixed into saved facts. A collapsed read-only recap joins the journal, bounded to42vh so the composer remains reachable on mobile.
+
+Four new headless real-server scenarios plus eight incumbent lore, six realtime and thirteen entertainment scenarios pass. Backend tests verify chapter focus isolation, progress, recap filtering and atomic owner-confirmed suggestions with duplicate retry protection. Rendered review at1264/390/320 shows readable sources and reachable confirmation controls; the320px recap retains journal and composer. Mechanical detector: no findings. Verdict: ship, limited to phase1; phase2/3 are not claimed delivered.
+
+## Script and durable memory extension · direction
+
+- Operate mode, existing visual identity unchanged. The user selected TXT/Markdown and pasted text, not PDF/Word.
+- Extend the campaign desk with a “剧本与记忆” tab. Searchable category list joins a plain-text reading/editor area; mobile stacks list then detail without adding modals.
+- Entries cover chapters, NPCs, quests, clues and confirmed facts. Owner-controlled public/secret scope is explicit before save. Only selected active public records enter bounded model context; no automatic private-model injection or AI inference becoming canon.
+- New imports are preview-only until saved. Version history, archive/restore and conflict-preserved drafts provide durable control without destructive deletion.
+- Inherit canvas-local colors, warning tokens, system type, full borders and restrained spacing. Keep reading comfortable and actions reachable in the existing scroll region.
+- Finish with isolated real-server permission/context tests and headless rendered review at desktop/mobile widths.
+
+### Finish evidence
+
+Eight isolated UI scenarios pass: import preview, context selection, unsaved edit retention, revision restore, secret isolation, conflict preservation, file limit rejection, archive/restore and responsive/theme coverage. Backend tests verify token permissions, secret-history filtering, context budgets and running-turn protection.
+Rendered review initially found unthemed list filters; fixed using existing field/focus/selection tokens. Refreshed dark captures at1264/768/390/320 and light1000 show usable editors and reachable save controls; player reader390 contains no secret labels or editing actions. Verdict: ship, scoped to this feature. Mechanical check only notes the intentional custom palette in the test fixture. No new visual system or raster assets introduced.
+
 ## Host streaming · 2026-11-25
 
 - Extend the established journal, with one temporary host entry marked “正在生成 · 尚未入档”; use inherited surface warning/muted tokens, a full border, 16px padding and 9px radius. No typewriter effect or token announcements.

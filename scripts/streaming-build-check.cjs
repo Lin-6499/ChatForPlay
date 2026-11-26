@@ -26,5 +26,7 @@ assert.ok(!asar.listPackage(archive).some(p => /[\\/]scripts[\\/]/.test(p)))
 const report = { passed: true, version: pkg.version, desktop: files.map(file => ({ file, sha256: hash(fs.readFileSync(file)) })),
   asarSha256: hash(fs.readFileSync(archive)), serverSha256: hash(fs.readFileSync('dist/server/linchat-windows-amd64.exe')),
   productionMetadataVerified: true, testEntrypointsExcluded: true }
-fs.writeFileSync('dist/verification/streaming/build-binding.json', JSON.stringify(report, null, 2))
+const output = process.env.LINCHAT_BINDING_OUTPUT || 'dist/verification/streaming/build-binding.json'
+fs.mkdirSync(path.dirname(output), { recursive: true })
+fs.writeFileSync(output, JSON.stringify(report, null, 2))
 console.log('PASS packaged desktop, metadata and server match the verified inputs')

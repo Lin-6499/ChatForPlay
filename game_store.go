@@ -31,6 +31,28 @@ func migrateGames(db *sql.DB) error {
 	  content TEXT NOT NULL, payload TEXT NOT NULL DEFAULT '{}', created_at INTEGER NOT NULL
 	);
 	CREATE INDEX IF NOT EXISTS campaign_events_order ON campaign_events(campaign_id,id);
+	CREATE TABLE IF NOT EXISTS campaign_lore (
+	  id INTEGER PRIMARY KEY, campaign_id INTEGER NOT NULL REFERENCES campaigns(id),
+	  kind TEXT NOT NULL, title TEXT NOT NULL, content TEXT NOT NULL,
+	  visibility TEXT NOT NULL, status TEXT NOT NULL, in_context INTEGER NOT NULL,
+	  version INTEGER NOT NULL, updated_at INTEGER NOT NULL
+	);
+	CREATE INDEX IF NOT EXISTS campaign_lore_list ON campaign_lore(campaign_id,status,id);
+	CREATE TABLE IF NOT EXISTS campaign_lore_details (
+	  entry_id INTEGER PRIMARY KEY REFERENCES campaign_lore(id),
+	  chapter_id INTEGER NOT NULL DEFAULT 0, progress TEXT NOT NULL DEFAULT ''
+	);
+	CREATE TABLE IF NOT EXISTS campaign_memory_suggestions (
+	  id INTEGER PRIMARY KEY, campaign_id INTEGER NOT NULL REFERENCES campaigns(id),
+	  turn_id INTEGER NOT NULL, event_id INTEGER NOT NULL REFERENCES campaign_events(id),
+	  document TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
+	  entry_id INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL
+	);
+	CREATE TABLE IF NOT EXISTS campaign_lore_history (
+	  entry_id INTEGER NOT NULL REFERENCES campaign_lore(id), version INTEGER NOT NULL,
+	  actor_id INTEGER NOT NULL, document TEXT NOT NULL, created_at INTEGER NOT NULL,
+	  PRIMARY KEY(entry_id,version)
+	);
 	CREATE TABLE IF NOT EXISTS campaign_operations (
 	  campaign_id INTEGER NOT NULL REFERENCES campaigns(id), actor TEXT NOT NULL, client_id TEXT NOT NULL,
 	  fingerprint TEXT NOT NULL, response TEXT NOT NULL, PRIMARY KEY(campaign_id,actor,client_id)
@@ -43,6 +65,19 @@ func migrateGames(db *sql.DB) error {
 	  error TEXT NOT NULL DEFAULT '', result TEXT NOT NULL DEFAULT '{}'
 	);
 	CREATE INDEX IF NOT EXISTS campaign_turns_queue ON campaign_turns(campaign_id,status,id);
+	CREATE TABLE IF NOT EXISTS campaign_flow (
+	  campaign_id INTEGER PRIMARY KEY REFERENCES campaigns(id), mode TEXT NOT NULL,
+	  participants TEXT NOT NULL, round INTEGER NOT NULL DEFAULT 1
+	);
+	CREATE TABLE IF NOT EXISTS campaign_collected_actions (
+	  campaign_id INTEGER NOT NULL, round INTEGER NOT NULL, user_id INTEGER NOT NULL,
+	  event_id INTEGER NOT NULL UNIQUE, turn_id INTEGER NOT NULL DEFAULT 0,
+	  PRIMARY KEY(campaign_id,round,user_id)
+	);
+	CREATE TABLE IF NOT EXISTS campaign_action_supplements (
+	  event_id INTEGER PRIMARY KEY REFERENCES campaign_events(id),
+	  base_event_id INTEGER NOT NULL REFERENCES campaign_events(id)
+	);
 	CREATE TABLE IF NOT EXISTS campaign_drafts (
 	  campaign_id INTEGER PRIMARY KEY REFERENCES campaigns(id),
 	  turn_id INTEGER NOT NULL, lease TEXT NOT NULL, seq INTEGER NOT NULL,
@@ -81,6 +116,12 @@ func migrateGames(db *sql.DB) error {
 	  event_id INTEGER NOT NULL REFERENCES campaign_events(id),
 	  PRIMARY KEY(campaign_id,prompt_event_id,user_id)
 	);
-	PRAGMA user_version=5;`)
+	CREATE TABLE IF NOT EXISTS campaign_host_activity (
+	  campaign_id INTEGER PRIMARY KEY REFERENCES campaigns(id),
+	  contact_at INTEGER NOT NULL DEFAULT 0, claim_at INTEGER NOT NULL DEFAULT 0,
+	  stream_at INTEGER NOT NULL DEFAULT 0, complete_at INTEGER NOT NULL DEFAULT 0,
+	  fail_at INTEGER NOT NULL DEFAULT 0
+	);
+	PRAGMA user_version=8;`)
 	return err
 }

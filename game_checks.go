@@ -212,7 +212,13 @@ func (a *app) prepareCheck(cid int64, g gameActor, in checkPrepareInput) (any, e
 				return nil, err
 			}
 			if event != in.EventID {
-				return nil, gameFail(400, "只能为当前回合的玩家行动创建检定")
+				var grouped int
+				if err := tx.QueryRow("SELECT count(*) FROM campaign_collected_actions WHERE campaign_id=? AND turn_id=? AND event_id=?", cid, in.TurnID, in.EventID).Scan(&grouped); err != nil {
+					return nil, err
+				}
+				if grouped != 1 {
+					return nil, gameFail(400, "只能为当前回合的玩家行动创建检定")
+				}
 			}
 		} else if err := gameVersion(c, in.Version); err != nil {
 			return nil, err
@@ -518,7 +524,7 @@ func checkTools() []any {
 	}
 	return []any{
 		gameTool("prepare_check", "属性/技能检定房规：投骰前锁定角色、属性、DC、消耗、六档后果；不可完成不可能事件或凭空即死。生命值为增减值，其余资源为完整替换；轻度失败可提供由玩家选择的代价成功 offer。属性修正由服务器读取角色计算。", map[string]any{
-			"character_id": integer, "kind": map[string]any{"type": "string", "enum": []string{"ability", "skill"}},
+			"character_id": integer, "event_id": integer, "kind": map[string]any{"type": "string", "enum": []string{"ability", "skill"}},
 			"ability": map[string]any{"type": "string", "enum": []string{"str", "dex", "con", "int", "wis", "cha"}},
 			"skill":   text, "reason": text, "bonus": integer, "bonus_reason": text, "dc": integer, "cost": effect,
 			"outcomes": map[string]any{"type": "object", "properties": outcomes, "required": checkGrades, "additionalProperties": false}, "offer": effect,
