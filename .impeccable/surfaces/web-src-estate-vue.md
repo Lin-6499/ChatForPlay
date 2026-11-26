@@ -30,6 +30,10 @@ No generated or third-party raster art. Verify isolated authoritative-server sce
 User approved prominent owner colours, reserved pawn docks and compact operation/board/chat ordering. Tiles now have separate information and fixed-height four-pawn rows, explicit coloured 地主：N号 labels; player-name buttons filter the holdings list. Solid selection and dashed authoritative landing are labelled separately. Compact action remains sticky, chat expands after the board; internal horizontal board scrolling preserves all tile text at small sizes rather than hiding names/rents.
 Six real-server edge scenarios pass, including four occupants non-overlap at1440/1280/820/390 and chat expansion preserving board offset. New evidence: `dist/verification/estate/ownership-*.png`. Go tests/build pass; hop regression passes. Local preview only, not deployed.
 
+## Pending-operation banner correction
+
+Normal in-flight requests persist an idempotency receipt before sending, but must not show that receipt as an unresolved-error banner. Hide the alert while a write/retry is in flight; show inline “正在提交…” on the ready control. Unknown-result failures and recovered pending receipts still show explicit retry. Isolated headless test holds a real committed response open and observes no alert insertion or heading movement; a dropped receipt survives reload and reuses its original request ID with no second version increment. Captures/results: `dist/verification/estate-pending/`. Scoped independent review: ship. Deployed to cloud1.2.16 with asset byte-match and existing33-table data preservation; no desktop installer released for this cloud patch.
+
 ## Pawn colour correction
 
 User screenshot rejected muted inherited pawn colours. Replaced with independent blue/orange/purple/green fills and white numbers; measured number contrast5.17/5.18/5.70/5.02. Targeted real-server checks assert actual SVG fill values; desktop/mobile captures visibly distinguish blue1 and orange2. Fresh independent review: ship for visible distinction, numeral readability and separate 主N owner labels; green4, active purple and light-theme visuals require the separate four-user run.

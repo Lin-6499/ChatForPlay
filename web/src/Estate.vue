@@ -208,7 +208,7 @@ onBeforeUnmount(() => { active = false; generation++; clearInterval(timer); canc
         <button class="text-button" @click="campaign">剧情战役</button>
       </div>
     </header>
-    <div v-if="error || pending" class="estate-error" role="alert">
+    <div v-if="!busy && (error || pending)" class="estate-error" role="alert">
       {{ error || '有一笔操作结果尚未确认，请重试原请求。' }}
       <button class="text-button" :disabled="busy" @click="pending ? retry() : load()">重试</button>
     </div>
@@ -252,7 +252,7 @@ onBeforeUnmount(() => { active = false; generation++; clearInterval(timer); canc
             <button v-for="(name, i) in tokenNames" :key="name" :disabled="!playable || game.players.some(p => p.id !== me.id && p.token === i)" :aria-pressed="mine?.token === i" @click="roomAction('token', { token: i })"><EstateToken :token="i" />{{ name }}</button>
           </fieldset>
           <div class="estate-row">
-            <button class="primary" :disabled="!playable" @click="roomAction('ready', { ready: !mine?.ready })">{{ mine?.ready ? '取消准备' : '准备' }}</button>
+            <button class="primary" :disabled="!playable" :aria-busy="busy" @click="roomAction('ready', { ready: !mine?.ready })">{{ busy ? '正在提交…' : mine?.ready ? '取消准备' : '准备' }}</button>
             <button v-if="game.owner_id === me.id" class="secondary" :disabled="!playable || !canStart" @click="roomAction('start')">开始对局</button>
             <button class="text-button" :disabled="!playable" @click="roomAction('leave')">离开准备房</button>
           </div>
