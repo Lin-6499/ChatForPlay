@@ -1,7 +1,7 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const { checkCampaignCapabilities } = require('./campaign-capabilities.cjs')
-const valid = { server_version: '1.2.12', protocol: { min: 1, max: 1 }, features: ['atomic_complete', 'stream_snapshots', 'd20_graded_v1', 'group_actions'] }
+const valid = { server_version: '1.2.13', protocol: { min: 1, max: 1 }, features: ['atomic_complete', 'stream_snapshots', 'd20_graded_v1', 'group_actions', 'lease_heartbeat', 'turn_budget'] }
 test('hosting startup checks protocol and required capabilities', async () => {
   assert.deepEqual(await checkCampaignCapabilities(async () => valid), valid)
   await assert.rejects(checkCampaignCapabilities(async () => ({ ...valid, protocol: { min: 2, max: 3 } })), /incompatible/)

@@ -10,7 +10,7 @@ async function checkCampaignCapabilities(request) {
   if (!Number.isInteger(data.protocol?.min) || !Number.isInteger(data.protocol?.max) || data.protocol.min > version || data.protocol.max < version) {
     throw Error('Campaign protocol is incompatible with this bot. Update the bot and server together.')
   }
-  const required = ['atomic_complete', 'stream_snapshots', 'd20_graded_v1', 'group_actions']
+  const required = ['atomic_complete', 'stream_snapshots', 'd20_graded_v1', 'group_actions', 'lease_heartbeat', 'turn_budget']
   if (!Array.isArray(data.features) || required.some(feature => !data.features.includes(feature))) {
     throw Error('Campaign server is missing required hosting capabilities. Update the server or use a matching bot version.')
   }

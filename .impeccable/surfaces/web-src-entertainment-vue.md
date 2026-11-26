@@ -7,6 +7,14 @@ related_targets: ["web/src/entertainment.css","web/src/game-types.ts","web/src/D
 
 # Entertainment mode — existing LinChat surface
 
+## Reliability refinements · 1.2.14
+
+Preserve the existing Operate surface and compact layout. Frozen supplements keep their words and offer an explicit unsent new-action draft, never an automatic submit. Suggestion review keeps its existing disclosure, adds pending-first filtering and bounded cursor pagination with total outstanding count. No new visual identity, motion or raster assets.
+
+Headless checks preserve supplement drafts across tabs and campaigns, reject mutations of claimed input, and confirm that transferring a frozen draft emits no event. Review pagination uses deterministic UI data; Go tests separately exercise real filtering/cursors and old pending records behind120 processed entries. Captures1264/390/320 show inherited colors and readable review controls. New builtin and external four-player recovery tests complete9 tools with one resource deduction per player.
+
+Final merged-build regressions cover inherited titlebar CSP, compact quick replies and entertainment flows. Detector reports no findings. Verdict: ship for the first three reliability fixes; resource audit/correction remains a separate follow-up.
+
 ## Compact window layout · 2026-11-26
 
 - Below 720px viewport height, reduce header, tabs and scene spacing while keeping journal typography intact. Reserve at least 150px of journal at the verified sizes.

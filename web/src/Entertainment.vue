@@ -25,6 +25,16 @@ const journalReady = ref(false)
 const replyPrompt = ref<ReplyPromptView | null>(null), replyError = ref('')
 type SelectedReply = { eventID: number; optionID: string; content: string }
 const selectedReply = ref<SelectedReply | null>(null), quickReplyLines = ref(''), replyTarget = ref(0)
+const supplementDrafts = ref<Record<string, { eventID: number; content: string }>>({})
+function supplementDraft(cid: number) {
+  const key = `${props.me.id}:${cid}`
+  return supplementDrafts.value[key] ||= { eventID: 0, content: '' }
+}
+function supplementAsAction(text: string) {
+  draft.value = draft.value.trim() ? `${draft.value}\n${text}` : text
+  composeKind.value = 'action'; selectedReply.value = null
+  emit('notify', '已转为新行动草稿，请核对后再提交；尚未发送')
+}
 const replyOptions = computed(() => quickReplyLines.value.split('\n').map(s => s.trim()).filter(Boolean))
 async function loadReplyPrompt(cid: number, generation: number) {
   try {
@@ -370,7 +380,7 @@ onBeforeUnmount(() => { stopped = true; requestGeneration++; clearInterval(timer
       <p v-if="error && !showCreate && !showAI && !showDice && !editCharacter" class="game-error" role="alert">{{ error }}<button class="text-button" @click="error = ''; refresh()">刷新</button></p>
       <template v-if="tab === 'journal'">
         <div class="game-context">
-        <CampaignFlow :key="`flow-${current.id}`" :campaign="current" :api="api" :me="me" :members="members" :revision="revision" @changed="refresh" />
+        <CampaignFlow :key="`flow-${current.id}`" :campaign="current" :api="api" :me="me" :members="members" :revision="revision" :draft-state="supplementDraft(current.id)" @changed="refresh" @new-action="supplementAsAction" />
         <CampaignRecap :key="current.id" :campaign-i-d="current.id" :api="api" :revision="current.version + revision" />
         <details class="game-scene" :open="!events.length"><summary><Icon name="book" :size="17" /><b>当前场景</b><span>{{ current.scene || '等待房主铺开第一幕' }}</span></summary><p>{{ current.scene || '房主可在主持台填写起始场景，再继续战役。' }}</p><div v-if="current.summary" class="game-summary"><h3>上次的故事</h3><p>{{ current.summary }}</p></div></details>
         </div>

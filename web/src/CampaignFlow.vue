@@ -1,17 +1,22 @@
 <script setup lang="ts">
 import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue'
 import type { Campaign, GameAPI, GameUser } from './game-types'
-type Action = { event_id: number; user_id: number; actor: string; content: string; supplements: { event_id: number; content: string }[] }
-type Turn = { turn_id: number; kind: string; status: string; error: string; started_at: number; actions: Action[] }
+type Action = { event_id: number; user_id: number; actor: string; content: string; can_supplement: boolean; supplements: { event_id: number; content: string }[] }
+type Turn = { turn_id: number; kind: string; status: string; error: string; started_at: number; deadline_at: number; actions: Action[] }
 type State = { flow: { mode: string; participants: number[]; round: number }; queue: Turn[]; collected: Action[]; waiting: { user_id: number; actor: string; left: boolean }[]; awaiting_choices: number }
-const props = defineProps<{ campaign: Campaign; api: GameAPI; me: GameUser; members: GameUser[]; revision: number }>()
-const emit = defineEmits<{ changed: [] }>()
+const props = defineProps<{ campaign: Campaign; api: GameAPI; me: GameUser; members: GameUser[]; revision: number; draftState: { eventID: number; content: string } }>()
+const emit = defineEmits<{ changed: []; newAction: [text: string] }>()
 const state = ref<State | null>(null), error = ref(''), readError = ref(''), busy = ref(false), now = ref(Date.now())
 const mode = ref('individual'), participants = ref<number[]>([]), configDirty = ref(false), confirmRelease = ref(false)
-const supplement = ref(0), text = ref('')
+const supplement = computed({ get: () => props.draftState.eventID, set: value => { props.draftState.eventID = value } })
+const text = computed({ get: () => props.draftState.content, set: value => { props.draftState.content = value } })
+const supplementAvailable = computed(() => {
+  const actions = [...(state.value?.collected || []), ...(state.value?.queue || []).flatMap(t => t.actions)]
+  return actions.some(a => a.event_id === supplement.value && a.user_id === props.me.id && a.can_supplement)
+})
 const owner = computed(() => props.me.id === props.campaign.owner_id)
 const blocked = computed(() => !!state.value?.queue.length || !!state.value?.collected.length || !!props.campaign.active_turn)
-const expired = (t: Turn) => t.status === 'running' && now.value - t.started_at > 180000
+const expired = (t: Turn) => t.status === 'running' && (now.value - t.started_at > 180000 || t.deadline_at > 0 && now.value >= t.deadline_at)
 const status = (t: Turn) => expired(t) ? '已超时，待房主处理' : t.status === 'running' ? '主持处理中' : t.status === 'failed' ? '失败待处理' : '排队中'
 const label = computed(() => {
   if (readError.value && !state.value) return '状态暂时无法读取'
@@ -53,6 +58,7 @@ async function write(path: string, body: Record<string, unknown>, method = 'POST
   finally { busy.value = false }
 }
 function openSupplement(id: number) { if (supplement.value && text.value.trim()) { error.value = '请先发送或取消当前补充'; return }; supplement.value = id; text.value = '' }
+function useAsNewAction() { emit('newAction', text.value); supplement.value = 0; text.value = '' }
 watch(() => props.revision, () => { void load() })
 watch(() => props.campaign.version, () => { void load() })
 onMounted(() => { void load(); timer = setInterval(() => { now.value = Date.now(); void load() }, 3000) })
@@ -69,12 +75,16 @@ onBeforeUnmount(() => { stopped = true; generation++; clearInterval(timer) })
       <template v-if="state">
         <p v-if="state.awaiting_choices" class="game-helper">还有 {{ state.awaiting_choices }} 项代价选择，必须由角色本人在“行动检定”确认，主持不能代选。</p>
         <section v-if="state.flow.mode === 'collect'"><h3>第 {{ state.flow.round }} 轮收集</h3><p class="game-helper">已提交 {{ state.collected.length }} / {{ state.flow.participants.length }} 人。全部到齐后自动组成一个联合回合；不会代未提交者决定行动。</p><p v-if="state.waiting.length" class="game-helper">等待：{{ state.waiting.map(p => p.actor + (p.left ? '（已离队）' : '')).join('、') }}</p>
-          <article v-for="a in state.collected" :key="a.event_id"><b>{{ a.actor }} · 已提交</b><p>{{ a.content }}</p><p v-for="s in a.supplements" :key="s.event_id">补充：{{ s.content }}</p><button v-if="a.user_id === me.id" class="text-button" :disabled="busy" @click="openSupplement(a.event_id)">补充这条行动</button></article>
+          <article v-for="a in state.collected" :key="a.event_id"><b>{{ a.actor }} · 已提交</b><p>{{ a.content }}</p><p v-for="s in a.supplements" :key="s.event_id">补充：{{ s.content }}</p><button v-if="a.user_id === me.id && a.can_supplement" class="text-button" :disabled="busy" @click="openSupplement(a.event_id)">补充这条行动</button></article>
           <template v-if="owner && state.collected.length"><button v-if="!confirmRelease" class="game-button" :disabled="busy" @click="confirmRelease = true">提前结束本轮收集</button><div v-else class="flow-confirm" role="alert"><p>只处理已提交的行动，未提交者跳过本轮，不会为他们虚构行动。确认继续？</p><button class="game-button" :disabled="busy" @click="write('flow/release', { version: campaign.version, allow_missing: true })">确认联合处理已提交行动</button><button class="text-button" @click="confirmRelease = false">继续等待</button></div></template>
         </section>
-        <ol v-if="state.queue.length" class="flow-queue"><li v-for="t in state.queue" :key="t.turn_id"><header><b>{{ status(t) }}</b><span>回合 #{{ t.turn_id }}{{ t.kind === 'group' ? ' · 联合行动' : '' }}</span></header><p v-if="!t.actions.length" class="game-helper">主持请求或已记录的骰子事件。</p><article v-for="a in t.actions" :key="a.event_id"><b>{{ a.actor }} · 行动 #{{ a.event_id }}</b><p>{{ a.content }}</p><p v-for="s in a.supplements" :key="s.event_id">补充：{{ s.content }}</p><button v-if="a.user_id === me.id && t.status === 'queued'" class="text-button" :disabled="busy" @click="openSupplement(a.event_id)">补充这条行动</button></article><p v-if="t.error" class="game-error">{{ t.error }}</p><div v-if="owner && (t.status === 'failed' || expired(t))" class="game-actions"><button class="game-button" :disabled="busy" @click="write(`turns/${t.turn_id}/retry`, { version: campaign.version })">重试并保留已掷骰</button><button class="text-button" :disabled="busy" @click="write(`turns/${t.turn_id}/retry`, { version: campaign.version, skip: true })">跳过此回合</button></div></li></ol>
+        <ol v-if="state.queue.length" class="flow-queue"><li v-for="t in state.queue" :key="t.turn_id"><header><b>{{ status(t) }}</b><span>回合 #{{ t.turn_id }}{{ t.kind === 'group' ? ' · 联合行动' : '' }}</span></header><p v-if="!t.actions.length" class="game-helper">主持请求或已记录的骰子事件。</p><article v-for="a in t.actions" :key="a.event_id"><b>{{ a.actor }} · 行动 #{{ a.event_id }}</b><p>{{ a.content }}</p><p v-for="s in a.supplements" :key="s.event_id">补充：{{ s.content }}</p><button v-if="a.user_id === me.id && a.can_supplement && t.status === 'queued'" class="text-button" :disabled="busy" @click="openSupplement(a.event_id)">补充这条行动</button></article><p v-if="t.error" class="game-error">{{ t.error }}</p><div v-if="owner && (t.status === 'failed' || expired(t))" class="game-actions"><button class="game-button" :disabled="busy" @click="write(`turns/${t.turn_id}/retry`, { version: campaign.version })">重试并保留已掷骰</button><button class="text-button" :disabled="busy" @click="write(`turns/${t.turn_id}/retry`, { version: campaign.version, skip: true })">跳过此回合</button></div></li></ol>
         <p v-else-if="state.flow.mode !== 'collect'" class="game-helper">没有待处理的行动。已完成的结果仍保留在日志。</p>
-        <form v-if="supplement" class="game-form" @submit.prevent="write(`actions/${supplement}/supplement`, { content: text })"><label>行动补充<textarea v-model="text" rows="3" maxlength="1000" required placeholder="追加说明，不改写原行动；主持领取后将不能再补充。"></textarea></label><div class="game-actions"><button class="game-button" :disabled="busy || !text.trim()">发送行动补充</button><button type="button" class="text-button" :disabled="busy" @click="supplement = 0; text = ''">取消补充</button></div></form>
+        <form v-if="supplement" class="game-form" @submit.prevent="supplementAvailable && write(`actions/${supplement}/supplement`, { content: text })">
+          <p v-if="state && !supplementAvailable" class="game-helper" role="status">原行动已领取、处理或冻结，补充文字已保留。可转为新的行动草稿，核对后再提交。</p>
+          <label>行动补充<textarea v-model="text" rows="3" maxlength="1000" required placeholder="追加说明，不改写原行动；主持领取后将不能再补充。"></textarea></label>
+          <div class="game-actions"><button class="game-button" :disabled="busy || !text.trim() || !supplementAvailable">发送行动补充</button><button v-if="!supplementAvailable" type="button" class="game-button" :disabled="busy || !text.trim()" @click="useAsNewAction">转为新行动草稿</button><button type="button" class="text-button" :disabled="busy" @click="supplement = 0; text = ''">取消补充</button></div>
+        </form>
         <details v-if="owner" class="flow-settings"><summary>设置行动节奏</summary><form class="game-form" @submit.prevent="write('flow', { version: campaign.version, mode, participants }, 'PUT')"><label>处理方式<select v-model="mode" aria-label="行动处理方式" @change="configDirty = true"><option value="individual">逐人处理</option><option value="collect">全员收集后联合处理</option></select></label><fieldset v-if="mode === 'collect'" :disabled="busy || blocked"><legend>本轮收集名单（1–12人）</legend><label v-for="p in members" :key="p.id" class="game-check"><input v-model="participants" type="checkbox" :value="p.id" @change="configDirty = true" />{{ p.nickname }}</label></fieldset><p class="game-helper">有排队、运行中或已收集的行动时不可更换节奏。全员收集需要开启自动排队及AI／外部主持。离队或未提交者由房主决定是否提前结束本轮。</p><button class="game-button" :disabled="busy || blocked || mode === 'collect' && !participants.length">保存行动节奏</button></form></details>
       </template>
     </div>

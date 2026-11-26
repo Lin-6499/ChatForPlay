@@ -27,9 +27,9 @@ func (a *app) gameCapabilities(r *http.Request, g gameActor) (any, error) {
 	}
 	return map[string]any{
 		"server_version": serverVersion, "protocol": map[string]any{"min": 1, "max": 1}, "campaign_id": c.ID,
-		"features":   []string{"atomic_complete", "stream_snapshots", "reply_choices", "d20_graded_v1", "lore", "memory_suggestions", "recap", "group_actions", "action_supplements"},
+		"features":   []string{"atomic_complete", "stream_snapshots", "reply_choices", "d20_graded_v1", "lore", "memory_suggestions", "recap", "group_actions", "action_supplements", "lease_heartbeat", "turn_budget"},
 		"check_rule": checkRule, "mode": c.Mode,
-		"limits": map[string]any{"lease_seconds": 180, "max_group_participants": 12, "max_supplements": 5, "context_characters": 24000, "max_memory_suggestions": 5},
+		"limits": map[string]any{"lease_seconds": 180, "attempt_seconds": 720, "max_tool_steps": 28, "max_group_participants": 12, "max_supplements": 5, "context_characters": 24000, "max_memory_suggestions": 5},
 		"docs": map[string]string{
 			"entry":     "https://github.com/Lin-6499/ChatForPlay/blob/main/docs/HOST_INTEGRATION.md",
 			"api":       "https://github.com/Lin-6499/ChatForPlay/blob/main/docs/CAMPAIGN_API.md",

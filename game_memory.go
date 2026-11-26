@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"time"
 	"unicode/utf8"
 )
@@ -151,8 +152,44 @@ func (a *app) gameMemorySuggestions(r *http.Request, g gameActor) (any, error) {
 	if !g.owner(c) {
 		return nil, gameFail(403, "记忆建议仅供房主确认")
 	}
-	rows, err := a.store.Query(`SELECT s.id,s.turn_id,s.event_id,s.document,s.status,s.entry_id,e.content FROM campaign_memory_suggestions s
-	  JOIN campaign_events e ON e.id=s.event_id AND e.campaign_id=s.campaign_id WHERE s.campaign_id=? ORDER BY s.id DESC LIMIT 100`, c.ID)
+	paged := r.URL.Query().Get("paged") == "1"
+	status := r.URL.Query().Get("status")
+	if status == "" {
+		status = "all"
+	}
+	if status != "all" && status != "pending" && status != "accepted" && status != "rejected" {
+		return nil, gameFail(400, "建议筛选状态无效")
+	}
+	before := int64(0)
+	if raw := r.URL.Query().Get("before"); raw != "" {
+		before, err = strconv.ParseInt(raw, 10, 64)
+		if err != nil || before < 1 {
+			return nil, gameFail(400, "分页游标无效")
+		}
+	}
+	limit := 100
+	if paged {
+		limit = 20
+	}
+	query := `SELECT s.id,s.turn_id,s.event_id,s.document,s.status,s.entry_id,e.content FROM campaign_memory_suggestions s
+	  JOIN campaign_events e ON e.id=s.event_id AND e.campaign_id=s.campaign_id WHERE s.campaign_id=?`
+	args := []any{c.ID}
+	if status != "all" {
+		query += " AND s.status=?"
+		args = append(args, status)
+	}
+	if before > 0 {
+		query += " AND s.id<?"
+		args = append(args, before)
+	}
+	if !paged && status == "all" {
+		query += " ORDER BY CASE WHEN s.status='pending' THEN 0 ELSE 1 END,s.id DESC"
+	} else {
+		query += " ORDER BY s.id DESC"
+	}
+	query += " LIMIT ?"
+	args = append(args, limit+1)
+	rows, err := a.store.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +203,27 @@ func (a *app) gameMemorySuggestions(r *http.Request, g gameActor) (any, error) {
 		}
 		out = append(out, map[string]any{"id": id, "turn_id": tid, "event_id": eid, "suggestion": json.RawMessage(document), "status": status, "entry_id": entry, "source_content": source})
 	}
-	return out, rows.Err()
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return nil, err
+	}
+	hasMore := len(out) > limit
+	if hasMore {
+		out = out[:limit]
+	}
+	if !paged {
+		return out, nil
+	}
+	var pending int
+	if err = a.store.QueryRow("SELECT count(*) FROM campaign_memory_suggestions WHERE campaign_id=? AND status='pending'", c.ID).Scan(&pending); err != nil {
+		return nil, err
+	}
+	var next int64
+	if hasMore && len(out) > 0 {
+		next = out[len(out)-1]["id"].(int64)
+	}
+	return map[string]any{"items": out, "total_pending": pending, "has_more": hasMore, "next_before": next, "status": status}, nil
 }
 func (a *app) gameRejectMemory(r *http.Request, g gameActor) (any, error) {
 	var in struct{ gameOp }

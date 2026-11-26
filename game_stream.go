@@ -82,12 +82,13 @@ func (a *app) gameStreamRead(r *http.Request, g gameActor) (any, error) {
 		return nil, err
 	}
 	var d gameDraft
-	err = a.store.QueryRow(`SELECT d.turn_id,d.seq,d.narration,t.started_at+180000 FROM campaign_drafts d
+	err = a.store.QueryRow(`SELECT d.turn_id,d.seq,d.narration,MIN(t.started_at+180000,COALESCE((SELECT deadline_at FROM campaign_turn_runtime WHERE turn_id=t.id),t.started_at+180000)) FROM campaign_drafts d
 	 JOIN campaign_turns t ON t.id=d.turn_id JOIN campaigns c ON c.id=d.campaign_id
 	 WHERE c.id=? AND c.active_turn=t.id AND c.phase='narrating' AND t.status='running'
 	 AND d.lease=t.lease AND t.base_version=c.version AND t.started_at>?
+	 AND COALESCE((SELECT deadline_at FROM campaign_turn_runtime WHERE turn_id=t.id),9223372036854775807)>?
 	 AND (t.claimant='builtin' OR EXISTS (SELECT 1 FROM campaign_tokens token
-	   WHERE 'agent:' || token.id=t.claimant AND token.campaign_id=c.id AND token.revoked=0 AND token.expires_at>?))`, c.ID, time.Now().UnixMilli()-180000, time.Now().UnixMilli()).Scan(&d.TurnID, &d.Seq, &d.Narration, &d.ExpiresAt)
+	   WHERE 'agent:' || token.id=t.claimant AND token.campaign_id=c.id AND token.revoked=0 AND token.expires_at>?))`, c.ID, time.Now().UnixMilli()-180000, time.Now().UnixMilli(), time.Now().UnixMilli()).Scan(&d.TurnID, &d.Seq, &d.Narration, &d.ExpiresAt)
 	if err == sql.ErrNoRows {
 		return map[string]any{"draft": nil}, nil
 	}
