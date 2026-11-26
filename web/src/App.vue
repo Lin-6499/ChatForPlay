@@ -774,7 +774,7 @@ onBeforeUnmount(() => {
        <div class="conversation-list" :data-scroll-key="`${me.id}/conversations/${query ? 'filtered' : 'all'}`">
         <button v-for="c in filteredConversations" :key="c.id" class="conversation-row" :class="{ selected: currentID === c.id }" @click="selectConversation(c)">
           <span class="avatar" :class="c.kind === 'lobby' ? 'dark' : hue(c.id)"><Icon v-if="c.kind === 'lobby'" name="globe" :size="22" /><Icon v-else-if="c.kind === 'group'" name="users" :size="21" /><template v-else>{{ avatar(c.name) }}</template></span>
-          <span class="conversation-text"><span class="conversation-title">{{ c.name }}<small>{{ time(c.last_at) }}</small></span><span class="preview"><strong v-if="c.unread_mentions" class="mention-unread" :aria-label="`${c.unread_mentions} 条消息提到了你`">@我</strong><span class="preview-text">{{ c.preview }}</span><b v-if="c.unread" class="unread">{{ c.unread > 99 ? '99+' : c.unread }}</b></span></span>
+          <span class="conversation-text"><span class="conversation-title"><span :title="c.name">{{ c.name }}</span><small>{{ time(c.last_at) }}</small></span><span class="preview"><strong v-if="c.unread_mentions" class="mention-unread" :aria-label="`${c.unread_mentions} 条消息提到了你`">@我</strong><span class="preview-text">{{ c.preview }}</span><b v-if="c.unread" class="unread">{{ c.unread > 99 ? '99+' : c.unread }}</b></span></span>
         </button>
         <p v-if="!filteredConversations.length" class="small-empty">没有找到相关会话</p>
       </div>

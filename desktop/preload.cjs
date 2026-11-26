@@ -4,30 +4,33 @@ const { contextBridge, ipcRenderer } = require('electron')
 // the title bar, including servers that have not yet updated their web bundle.
 if (process.platform === 'win32') {
   window.addEventListener('DOMContentLoaded', () => {
-    const style = document.createElement('style')
-    style.textContent = `
+    // Constructed stylesheets work under the launcher's strict style-src CSP,
+    // which rejects injected <style> elements on both local and remote pages.
+    const style = new CSSStyleSheet()
+    style.replaceSync(`
       html[data-linchat-titlebar] { --linchat-titlebar-height: env(titlebar-area-height, 32px); }
       html[data-linchat-titlebar] body { margin-top: var(--linchat-titlebar-height); min-height: calc(100vh - var(--linchat-titlebar-height)); }
       html[data-linchat-titlebar] .app-shell { min-height: calc(100dvh - var(--linchat-titlebar-height)); }
       html[data-linchat-titlebar] .app-shell.signed-in { height: calc(100dvh - var(--linchat-titlebar-height)); }
       html[data-linchat-titlebar] .loading-screen { height: calc(100dvh - var(--linchat-titlebar-height)); }
       html[data-linchat-titlebar] .modal-backdrop { top: var(--linchat-titlebar-height); }
-    `
-    document.head.append(style)
+    `)
+    document.adoptedStyleSheets = [...document.adoptedStyleSheets, style]
     const bar = document.createElement('div')
     bar.id = 'linchat-window-titlebar'
     const shadow = bar.attachShadow({ mode: 'closed' })
-    const rules = document.createElement('style')
-    rules.textContent = `
+    const rules = new CSSStyleSheet()
+    rules.replaceSync(`
       :host { position: fixed; inset: 0 0 auto; height: env(titlebar-area-height, 32px); z-index: 2147483647;
         background: var(--chrome-background, #1b2220); color: var(--chrome-text, #edf2ef); }
       :host([hidden]) { display: none; }
       .title { height: 100%; width: env(titlebar-area-width, calc(100% - 144px)); box-sizing: border-box;
         display: flex; align-items: center; padding: 0 12px; -webkit-app-region: drag; user-select: none; }
       span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12px "Segoe UI", "Microsoft YaHei", sans-serif; }
-    `
+    `)
+    shadow.adoptedStyleSheets = [rules]
     const drag = document.createElement('div'), title = document.createElement('span')
-    drag.className = 'title'; drag.append(title); shadow.append(rules, drag)
+    drag.className = 'title'; drag.append(title); shadow.append(drag)
     document.documentElement.append(bar)
     function updateTitle() { title.textContent = document.title || 'LinChat · 让交流近一点' }
     updateTitle()

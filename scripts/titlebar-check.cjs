@@ -32,10 +32,18 @@ async function main() {
       new Function('require', 'process', preload)(() => electron, { platform: 'win32' })
     }, { preload })
     const page = await context.newPage()
+    const policyViolations = []
+    await page.exposeFunction('recordPolicyViolation', directive => policyViolations.push(directive))
+    await page.addInitScript(() => {
+      document.addEventListener('securitypolicyviolation', event => window.recordPolicyViolation(event.violatedDirective))
+    })
     const css = fs.readFileSync(path.resolve(__dirname, '../web/src/style.css'), 'utf8')
-    await page.route('http://titlebar.test/**', route => route.fulfill({
+    const launcher = fs.readFileSync(path.resolve(__dirname, '../desktop/index.html'), 'utf8')
+    const policy = launcher.match(/http-equiv="Content-Security-Policy" content="([^"]+)"/)[1]
+    await page.route('http://titlebar.test/style.css', route => route.fulfill({ contentType: 'text/css', body: css }))
+    await page.route('http://titlebar.test/', route => route.fulfill({
       contentType: 'text/html; charset=utf-8',
-      body: `<html><head><meta charset="utf-8"><title>LinChat · 让交流近一点</title><style>${css}</style></head>
+      body: `<html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${policy}"><title>LinChat · 让交流近一点</title><link rel="stylesheet" href="/style.css"></head>
         <body><div id="app"><main class="app-shell signed-in"><div class="workspace">
         <nav>LinChat</nav><aside>公共大厅</aside><section>继续对话</section>
         </div></main></div></body></html>`,
@@ -55,6 +63,10 @@ async function main() {
         assert.equal(bounds.y, 32)
         assert.equal(bounds.y + bounds.height, size.height)
         assert.equal(await page.evaluate(() => document.documentElement.scrollHeight), size.height)
+        const titlebar = await page.locator('#linchat-window-titlebar').boundingBox()
+        assert.equal(titlebar.y, 0)
+        assert.equal(titlebar.height, 32)
+        assert.equal(titlebar.width, size.width)
         assert.equal(await page.locator('#linchat-window-titlebar').evaluate(el => el.style.getPropertyValue('--chrome-background')), panel)
         await page.screenshot({ path: path.join(output, `${size.width}-${panel.slice(1)}.png`) })
       }
@@ -64,7 +76,8 @@ async function main() {
       await page.evaluate(() => window.applyChrome({ enabled: true, color: '#1b2220', symbolColor: '#edf2ef', fullscreen: false }))
       assert.equal((await page.locator('.app-shell').boundingBox()).y, 32)
     }
-    console.log('PASS: preload titlebar, 2 window sizes × 3 palettes, contrast, viewport fit, fullscreen restoration')
+    assert.deepEqual(policyViolations, [], 'Titlebar must work without violating the launcher CSP')
+    console.log('PASS: preload titlebar under launcher CSP, 2 window sizes × 3 palettes, contrast, viewport fit, fullscreen restoration')
   } finally { await browser.close() }
 }
 main().catch(error => { console.error(error); process.exitCode = 1 })
